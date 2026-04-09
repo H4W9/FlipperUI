@@ -1,7 +1,5 @@
-# Tauri + React + Typescript
+# FlipperUI
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+a simple, fast and easy qFlipper alternative that prioritizes the file explorer.
 
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+for now JUST a file explorer
