@@ -64,21 +64,21 @@ export function DevicePanel() {
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900 border-b border-gray-700 shrink-0">
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900 border-b border-zinc-700 shrink-0">
       {/* Icon */}
       <Usb size={18} className="text-orange-400 shrink-0" />
 
       {/* Title */}
       <span className="font-semibold text-sm text-white">FlipperUI</span>
 
-      <div className="w-px h-4 bg-gray-600 mx-1" />
+      <div className="w-px h-4 bg-zinc-600 mx-1" />
 
       {/* Port selector */}
       <select
         value={selectedPort ?? ""}
         onChange={(e) => setSelectedPort(e.target.value || null)}
         disabled={isConnected || isConnecting}
-        className="bg-gray-800 text-gray-200 text-sm border border-gray-600 rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-orange-500"
+        className="bg-zinc-800 text-zinc-200 text-sm border border-zinc-600 rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-orange-500"
       >
         <option value="">Select port…</option>
         {ports.map((p) => (
@@ -102,7 +102,7 @@ export function DevicePanel() {
       ) : (
         <button
           onClick={handleDisconnect}
-          className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors"
+          className="px-3 py-1 text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded transition-colors"
         >
           Disconnect
         </button>
@@ -110,10 +110,10 @@ export function DevicePanel() {
 
       {/* Device info */}
       {deviceInfo && (
-        <div className="flex items-center gap-2 ml-1 text-xs text-gray-400">
+        <div className="flex items-center gap-2 ml-1 text-xs text-zinc-400">
           <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
           {deviceInfo.hardware_name && (
-            <span className="text-gray-300">{deviceInfo.hardware_name}</span>
+            <span className="text-zinc-300">{deviceInfo.hardware_name}</span>
           )}
           {deviceInfo.firmware_version && (
             <span>fw {deviceInfo.firmware_version}</span>
@@ -128,7 +128,7 @@ export function DevicePanel() {
           const p = await listPorts().catch(() => []);
           setPorts(p);
         }}
-        className="text-gray-500 hover:text-gray-300 p-1 rounded transition-colors"
+        className="text-zinc-500 hover:text-zinc-300 p-1 rounded transition-colors"
         title="Refresh ports"
       >
         <RefreshCw size={14} />

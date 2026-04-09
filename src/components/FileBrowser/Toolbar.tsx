@@ -31,10 +31,10 @@ export function Toolbar() {
   };
 
   return (
-    <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-700/60 bg-gray-900/30 min-h-[34px]">
+    <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-zinc-700/60 bg-zinc-900/30 min-h-[34px]">
       <button
         onClick={upload}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 rounded transition-colors shrink-0"
+        className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors shrink-0"
       >
         <Upload size={13} />
         Upload
@@ -52,7 +52,7 @@ export function Toolbar() {
               if (e.key === "Escape") cancelCreate();
             }}
             placeholder="Folder name…"
-            className="w-36 px-2 py-0.5 text-xs bg-gray-800 border border-orange-500/60 text-gray-100 rounded outline-none focus:border-orange-400"
+            className="w-36 px-2 py-0.5 text-xs bg-zinc-800 border border-orange-500/60 text-zinc-100 rounded outline-none focus:border-orange-400"
           />
           <button
             onClick={confirmCreate}
@@ -63,7 +63,7 @@ export function Toolbar() {
           </button>
           <button
             onClick={cancelCreate}
-            className="p-1 text-gray-500 hover:text-gray-300 rounded"
+            className="p-1 text-zinc-500 hover:text-zinc-300 rounded"
             title="Cancel"
           >
             <X size={13} />
@@ -72,7 +72,7 @@ export function Toolbar() {
       ) : (
         <button
           onClick={startCreate}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 rounded transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors shrink-0"
         >
           <FolderPlus size={13} />
           New Folder
@@ -80,11 +80,11 @@ export function Toolbar() {
       )}
 
       <div className="flex-1" />
-      <span className="text-xs text-gray-500 font-mono truncate max-w-xs">{currentPath}</span>
+      <span className="text-xs text-zinc-500 font-mono truncate max-w-xs">{currentPath}</span>
       <button
         onClick={() => refresh(currentPath)}
         disabled={isLoading}
-        className="p-1 text-gray-500 hover:text-gray-300 disabled:opacity-40 rounded transition-colors shrink-0"
+        className="p-1 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 rounded transition-colors shrink-0"
         title="Refresh"
       >
         <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />

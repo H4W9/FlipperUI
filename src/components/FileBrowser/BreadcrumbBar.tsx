@@ -16,7 +16,7 @@ export function BreadcrumbBar() {
   };
 
   return (
-    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-gray-900/50 border-b border-gray-700/60 text-sm overflow-x-auto">
+    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-zinc-900/50 border-b border-zinc-700/60 text-sm overflow-x-auto">
       <button
         onClick={() => navigateTo(-1)}
         className="text-orange-400 hover:text-orange-300 font-mono shrink-0"
@@ -25,13 +25,13 @@ export function BreadcrumbBar() {
       </button>
       {parts.map((segment, i) => (
         <span key={i} className="flex items-center gap-0.5 shrink-0">
-          <ChevronRight size={12} className="text-gray-600" />
+          <ChevronRight size={12} className="text-zinc-600" />
           <button
             onClick={() => navigateTo(i)}
             className={
               i === parts.length - 1
-                ? "text-gray-100 font-mono"
-                : "text-gray-400 hover:text-gray-200 font-mono"
+                ? "text-zinc-100 font-mono"
+                : "text-zinc-400 hover:text-zinc-200 font-mono"
             }
           >
             {segment}

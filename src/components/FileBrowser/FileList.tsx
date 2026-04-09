@@ -77,29 +77,29 @@ function ContextMenu({
   style.left = x + menuW > winW ? winW - menuW - 4 : x;
   style.top = y + menuH > winH ? winH - menuH - 4 : y;
 
-  const item = "flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-700 cursor-pointer rounded transition-colors";
+  const item = "flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-700 cursor-pointer rounded transition-colors";
 
   return (
     <div
       ref={ref}
       style={style}
-      className="w-40 bg-gray-800 border border-gray-600 rounded shadow-xl py-1 text-gray-200"
+      className="w-40 bg-zinc-800 border border-zinc-600 rounded shadow-xl py-1 text-zinc-200"
     >
       <div
         className={item}
         onMouseDown={(e) => { e.preventDefault(); onRename(); onClose(); }}
       >
-        <Pencil size={12} className="text-gray-400" /> Rename
+        <Pencil size={12} className="text-zinc-400" /> Rename
       </div>
       {!isDir && (
         <div
           className={item}
           onMouseDown={(e) => { e.preventDefault(); onDownload(); onClose(); }}
         >
-          <Download size={12} className="text-gray-400" /> Download
+          <Download size={12} className="text-zinc-400" /> Download
         </div>
       )}
-      <div className="my-1 border-t border-gray-700" />
+      <div className="my-1 border-t border-zinc-700" />
       <div
         className={`${item} text-red-400 hover:text-red-300 hover:bg-red-900/30`}
         onMouseDown={(e) => { e.preventDefault(); onDelete(); onClose(); }}
@@ -158,7 +158,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1.5 border-b border-gray-800/60 hover:bg-gray-800/40 group text-sm ${
+      className={`flex items-center gap-2 px-3 py-1.5 border-b border-zinc-800/60 hover:bg-zinc-800/40 group text-sm ${
         isDir && !isRenaming ? "cursor-pointer" : ""
       }`}
       onClick={handleClick}
@@ -168,7 +168,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
       {isDir ? (
         <Folder size={15} className="text-orange-400 shrink-0" />
       ) : (
-        <File size={15} className="text-gray-500 shrink-0" />
+        <File size={15} className="text-zinc-500 shrink-0" />
       )}
 
       {/* Name — switches to inline input when renaming */}
@@ -185,7 +185,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
               if (e.key === "Enter") commitRename();
               if (e.key === "Escape") cancelRename();
             }}
-            className="flex-1 px-1.5 py-0.5 text-sm bg-gray-800 border border-orange-500/60 text-gray-100 rounded outline-none focus:border-orange-400"
+            className="flex-1 px-1.5 py-0.5 text-sm bg-zinc-800 border border-orange-500/60 text-zinc-100 rounded outline-none focus:border-orange-400"
           />
           <button
             onClick={commitRename}
@@ -195,14 +195,14 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
           </button>
           <button
             onClick={cancelRename}
-            className="p-0.5 text-gray-500 hover:text-gray-300"
+            className="p-0.5 text-zinc-500 hover:text-zinc-300"
           >
             <X size={13} />
           </button>
         </div>
       ) : (
         <span
-          className={`flex-1 truncate ${isDir ? "text-orange-200" : "text-gray-200"}`}
+          className={`flex-1 truncate ${isDir ? "text-orange-200" : "text-zinc-200"}`}
         >
           {entry.name}
         </span>
@@ -210,7 +210,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
 
       {/* Size (files only, hidden while renaming) */}
       {!isRenaming && (
-        <span className="text-xs text-gray-500 w-16 text-right shrink-0">
+        <span className="text-xs text-zinc-500 w-16 text-right shrink-0">
           {isDir ? "" : formatSize(entry.size)}
         </span>
       )}
@@ -223,7 +223,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
         >
           <button
             onClick={() => onStartRename(entry.name)}
-            className="p-1 text-gray-400 hover:text-orange-400 rounded"
+            className="p-1 text-zinc-400 hover:text-orange-400 rounded"
             title="Rename"
           >
             <Pencil size={13} />
@@ -231,7 +231,7 @@ function FileRow({ entry, isRenaming, onStartRename, onContextMenu }: FileRowPro
           {!isDir && (
             <button
               onClick={() => download(entry.name)}
-              className="p-1 text-gray-400 hover:text-blue-400 rounded"
+              className="p-1 text-zinc-400 hover:text-blue-400 rounded"
               title="Download"
             >
               <Download size={13} />
@@ -262,7 +262,7 @@ export function FileList() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center flex-1 gap-2 text-gray-500">
+      <div className="flex items-center justify-center flex-1 gap-2 text-zinc-500">
         <Spinner size={16} />
         <span className="text-sm">Loading…</span>
       </div>
@@ -271,7 +271,7 @@ export function FileList() {
 
   if (entries.length === 0) {
     return (
-      <div className="flex items-center justify-center flex-1 text-gray-600 text-sm">
+      <div className="flex items-center justify-center flex-1 text-zinc-600 text-sm">
         {currentPath === "/" ? "No files" : "Empty directory"}
       </div>
     );
@@ -281,7 +281,7 @@ export function FileList() {
     <>
       <div className="flex-1 overflow-y-auto">
         {/* Column header */}
-        <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-700 bg-gray-900/60 text-xs text-gray-500 sticky top-0">
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-zinc-700 bg-zinc-900/60 text-xs text-zinc-500 sticky top-0">
           <span className="w-4 shrink-0" />
           <span className="flex-1">Name</span>
           <span className="w-16 text-right shrink-0">Size</span>

@@ -6,14 +6,14 @@ export default function App() {
   const isConnected = useFlipperStore((s) => s.isConnected);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-black text-zinc-100 overflow-hidden select-none">
       <DevicePanel />
       {isConnected ? (
         <div className="flex-1 overflow-hidden flex flex-col">
           <FileBrowser />
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-600">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-600">
           <svg
             width="48"
             height="48"
@@ -21,7 +21,7 @@ export default function App() {
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
-            className="text-gray-700"
+            className="text-zinc-700"
           >
             <rect x="7" y="2" width="10" height="20" rx="2" />
             <path d="M12 18h.01" />
