@@ -1,9 +1,13 @@
+use std::sync::atomic::Ordering;
+
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::error::Result;
+use std::collections::HashMap;
+
+use crate::error::{FlipperError, Result};
 use crate::flipper::session;
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionMode};
 
 #[derive(Serialize, Deserialize)]
 pub struct PortInfo {
@@ -57,6 +61,14 @@ pub fn list_ports() -> Result<Vec<PortInfo>> {
 /// Open a connection to the Flipper Zero on the given port.
 #[tauri::command]
 pub fn connect(port: String, state: State<AppState>) -> Result<DeviceInfo> {
+    // Clean up any previous sessions
+    state.cli_reader_active.store(false, Ordering::Relaxed);
+    state.screen_stream_active.store(false, Ordering::Relaxed);
+    {
+        let mut mode = state.mode.lock().unwrap();
+        *mode = ConnectionMode::Rpc;
+    }
+
     let mut guard = state.client.lock().unwrap();
     // Drop any existing connection first
     *guard = None;
@@ -77,7 +89,47 @@ pub fn connect(port: String, state: State<AppState>) -> Result<DeviceInfo> {
 /// Close the current connection to the Flipper Zero.
 #[tauri::command]
 pub fn disconnect(state: State<AppState>) -> Result<()> {
+    // Stop any running CLI reader or screen stream thread
+    state.cli_reader_active.store(false, Ordering::Relaxed);
+    state.screen_stream_active.store(false, Ordering::Relaxed);
+    {
+        let mut mode = state.mode.lock().unwrap();
+        *mode = ConnectionMode::Rpc;
+    }
     let mut guard = state.client.lock().unwrap();
     *guard = None; // Drop closes the serial port
     Ok(())
+}
+
+/// Get power/battery info from the Flipper.
+/// Returns a key-value map (e.g. "charge", "voltage", "current", "temperature").
+#[tauri::command]
+pub fn power_info(state: State<AppState>) -> Result<HashMap<String, String>> {
+    let mode = state.mode.lock().unwrap();
+    if *mode == ConnectionMode::Cli {
+        return Err(FlipperError::CliModeActive);
+    }
+    drop(mode);
+
+    let mut guard = state.client.lock().unwrap();
+    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+    session::get_power_info(client)
+}
+
+/// Reboot the Flipper Zero.
+/// mode: 0 = OS (normal reboot), 1 = DFU, 2 = UPDATE
+#[tauri::command]
+pub fn reboot(mode: i32, state: State<AppState>) -> Result<()> {
+    let conn_mode = state.mode.lock().unwrap();
+    if *conn_mode == ConnectionMode::Cli {
+        return Err(FlipperError::CliModeActive);
+    }
+    drop(conn_mode);
+
+    let mut guard = state.client.lock().unwrap();
+    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+    let result = session::reboot(client, mode);
+    // Device reboots immediately — drop the client since port is gone
+    *guard = None;
+    result
 }

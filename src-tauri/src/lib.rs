@@ -49,6 +49,17 @@ pub fn run() {
             commands::storage::storage_mkdir,
             commands::storage::storage_delete,
             commands::storage::storage_rename,
+            commands::storage::storage_info,
+            commands::storage::storage_timestamp,
+            commands::storage::storage_tar_extract,
+            commands::storage::cancel_transfer,
+            commands::device::power_info,
+            commands::device::reboot,
+            commands::cli::cli_start,
+            commands::cli::cli_send,
+            commands::cli::cli_stop,
+            commands::gui::screen_stream_start,
+            commands::gui::screen_stream_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

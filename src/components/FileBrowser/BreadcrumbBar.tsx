@@ -16,22 +16,22 @@ export function BreadcrumbBar() {
   };
 
   return (
-    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-zinc-900/50 border-b border-zinc-700/60 text-sm overflow-x-auto">
+    <div className="flex items-center gap-0.5 px-3 py-1.5 bg-panel/50 border-b border-flipper/60 text-sm overflow-x-auto">
       <button
         onClick={() => navigateTo(-1)}
-        className="text-orange-400 hover:text-orange-300 font-mono shrink-0"
+        className="text-accent hover:text-accent-hover font-mono shrink-0"
       >
         /
       </button>
       {parts.map((segment, i) => (
         <span key={i} className="flex items-center gap-0.5 shrink-0">
-          <ChevronRight size={12} className="text-zinc-600" />
+          <ChevronRight size={12} className="text-dim" />
           <button
             onClick={() => navigateTo(i)}
             className={
               i === parts.length - 1
-                ? "text-zinc-100 font-mono"
-                : "text-zinc-400 hover:text-zinc-200 font-mono"
+                ? "text-primary font-mono"
+                : "text-secondary hover:text-primary font-mono"
             }
           >
             {segment}

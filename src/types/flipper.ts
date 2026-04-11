@@ -24,3 +24,8 @@ export interface FileEntry {
   size: number;
   md5sum: string;
 }
+
+export interface StorageInfo {
+  total_space: number;
+  free_space: number;
+}

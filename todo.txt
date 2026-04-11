@@ -1,0 +1,69 @@
+____________________________________________________________
+
+TODO - FlipperUI
+____________________________________________________________
+
+a list of everything i'd like to implement sooner or l8er :)
+
+______________________________
+
+INFO
+______________________________
+
+Colors:
+    Flipper Orange
+        #ff8300
+
+
+______________________________
+
+TODO - PENDING
+______________________________
+
+
+
+
+______________________________
+
+TODO - OPEN
+______________________________
+
+--- NEW FEATURES ---
+[ ] file drag-out - drag files FROM file browser to Finder (requires @crabnebula-dev/tauri-plugin-drag)
+[ ] send input events to flipper via screen viewer (button clicks for Up/Down/Left/Right/OK/Back)
+[ ] screen capture - save current flipper screen as PNG
+
+
+
+
+______________________________
+
+TODO - DONE
+______________________________
+
+[x] add drag and drop functionality for uploads and downloads
+[x] add file-size formatting into readable formats (MB, KB)
+[x] add a cli connected to flipper to the bottom of the app
+[x] add working progress-bar for downloads
+[x] multi-file selection with bulk delete/download
+[x] search/filter files by name in current directory
+[x] sort by columns (name, size, type) - click column header
+[x] show storage space (free/total) via StorageInfoRequest
+[x] show battery/power info in DevicePanel via PowerInfoRequest
+[x] show firmware build date in DevicePanel
+[x] keyboard shortcuts - Del for delete, F2 for rename, Ctrl+U for upload
+[x] resizable CLI panel - drag handle to adjust terminal height
+[x] multiple file upload - open({ multiple: true }) in upload dialog
+[x] device reboot button via RebootRequest
+[x] tar extract - right-click context menu for .tar and .tar.gz files
+[x] error banner auto-dismiss after ~6 seconds
+[x] increase upload chunk size from 512B to 8KB
+[x] cap cli history at ~5000 lines
+[x] progress bar clears immediately on failed transfers
+[x] cancel transfer button - wired to actual abort logic (Rust AtomicBool flag)
+[x] css custom properties - Tailwind v4 @theme with semantic color tokens
+[x] auto-reconnect on USB disconnect/reconnect
+[x] fix cli echo duplication - resolved by rewrite (no local echo, Flipper echoes naturally)
+[x] virtual scrolling for directories with 1000+ files (@tanstack/react-virtual)
+[x] show file timestamps - lazy-loaded on hover via storageTimestamp, cached per session
+[x] screen streaming - live Flipper screen via StartScreenStreamRequest, XBM→RGBA rendering

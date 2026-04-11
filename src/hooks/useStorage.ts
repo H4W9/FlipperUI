@@ -64,37 +64,47 @@ export function useStorage() {
 
   const download = async (name: string) => {
     const remotePath = joinPath(currentPath, name);
+    let unlisten: (() => void) | undefined;
+    let failed = false;
     try {
       const savePath = await save({ defaultPath: name });
       if (!savePath) return;
 
       setTransferProgress(0);
+
+      unlisten = await listen<number>("download-progress", (event) => {
+        setTransferProgress(event.payload);
+      });
+
       const b64 = await storageRead(remotePath);
-      setTransferProgress(80);
-      await writeFile(savePath, base64ToUint8Array(b64));
       setTransferProgress(100);
+      await writeFile(savePath, base64ToUint8Array(b64));
     } catch (e: unknown) {
-      setError(String(e));
+      failed = true;
+      const msg = String(e);
+      if (!msg.includes("Transfer cancelled")) {
+        setError(msg);
+      }
     } finally {
-      setTimeout(() => setTransferProgress(null), 600);
+      unlisten?.();
+      if (failed) {
+        setTransferProgress(null);
+      } else {
+        setTimeout(() => setTransferProgress(null), 600);
+      }
     }
   };
 
-  const upload = async () => {
-    // Listen for chunk-level progress events emitted by the Rust storage_write command
+  const uploadFile = async (localPath: string) => {
     let unlisten: (() => void) | undefined;
+    let failed = false;
     try {
-      const selected = await open({ multiple: false });
-      if (!selected) return;
-
-      const localPath = selected as string;
       const localBytes = await readFile(localPath);
       const fileName = localPath.split("/").pop() ?? "file";
       const remotePath = joinPath(currentPath, fileName);
 
       setTransferProgress(0);
 
-      // Subscribe before invoking so we don't miss early events
       unlisten = await listen<number>("upload-progress", (event) => {
         setTransferProgress(event.payload);
       });
@@ -104,10 +114,28 @@ export function useStorage() {
 
       await refresh(currentPath);
     } catch (e: unknown) {
-      setError(String(e));
+      failed = true;
+      const msg = String(e);
+      if (!msg.includes("Transfer cancelled")) {
+        setError(msg);
+      }
     } finally {
       unlisten?.();
-      setTimeout(() => setTransferProgress(null), 600);
+      if (failed) {
+        setTransferProgress(null);
+      } else {
+        setTimeout(() => setTransferProgress(null), 600);
+      }
+    }
+  };
+
+  const upload = async () => {
+    const selected = await open({ multiple: true });
+    if (!selected) return;
+    // open() returns string | string[] depending on multiple flag
+    const paths = Array.isArray(selected) ? selected : [selected];
+    for (const path of paths) {
+      await uploadFile(path);
     }
   };
 
@@ -143,5 +171,5 @@ export function useStorage() {
     }
   };
 
-  return { refresh, download, upload, mkdir, rename, remove };
+  return { refresh, download, upload, uploadFile, mkdir, rename, remove };
 }

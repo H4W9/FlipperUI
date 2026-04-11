@@ -5,7 +5,7 @@ use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::flipper::storage;
 use crate::pb_storage;
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionMode};
 
 /// Mirror of pb_storage::File for the frontend, with base64-encoded data.
 #[derive(Serialize, Deserialize)]
@@ -29,11 +29,18 @@ impl From<pb_storage::File> for FileEntry {
 }
 
 /// Run a closure with exclusive access to the connected FlipperClient.
+/// Rejects the call if the device is in CLI mode.
 /// Tears down the connection on any error so the user must reconnect.
 fn with_client<T>(
     state: &State<AppState>,
     f: impl FnOnce(&mut FlipperClient) -> Result<T>,
 ) -> Result<T> {
+    {
+        let mode = state.mode.lock().unwrap();
+        if *mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+    }
     let mut guard = state.client.lock().unwrap();
     let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
     match f(client) {
@@ -61,10 +68,16 @@ pub fn storage_stat(path: String, state: State<AppState>) -> Result<FileEntry> {
 
 /// Read a file from the Flipper. Returns base64-encoded bytes to avoid
 /// JSON number-array overhead for large files.
+/// Emits `"download-progress"` events (u32 0–100) to the frontend after each chunk.
 #[tauri::command]
-pub fn storage_read(path: String, state: State<AppState>) -> Result<String> {
+pub fn storage_read(path: String, state: State<AppState>, app: AppHandle) -> Result<String> {
+    let cancelled = state.transfer_cancelled.clone();
+    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
     with_client(&state, |c| {
-        let data = storage::storage_read(c, &path)?;
+        let data = storage::storage_read(c, &path, |received, total| {
+            let pct = if total > 0 { (received * 100 / total) as u32 } else { 0 };
+            let _ = app.emit("download-progress", pct);
+        }, &cancelled)?;
         Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data))
     })
 }
@@ -81,11 +94,13 @@ pub fn storage_write(
     let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
         .map_err(|e| FlipperError::Session(format!("base64 decode error: {e}")))?;
 
+    let cancelled = state.transfer_cancelled.clone();
+    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
     with_client(&state, |c| {
         storage::storage_write(c, &path, &bytes, |sent, total| {
             let pct = (sent * 100 / total) as u32;
             let _ = app.emit("upload-progress", pct);
-        })
+        }, &cancelled)
     })
 }
 
@@ -112,4 +127,48 @@ pub fn storage_rename(
     state: State<AppState>,
 ) -> Result<()> {
     with_client(&state, |c| storage::storage_rename(c, &old_path, &new_path))
+}
+
+/// Storage space info for a path (e.g. "/ext" or "/int").
+#[derive(Serialize, Deserialize)]
+pub struct StorageInfo {
+    pub total_space: u64,
+    pub free_space: u64,
+}
+
+#[tauri::command]
+pub fn storage_info(path: String, state: State<AppState>) -> Result<StorageInfo> {
+    with_client(&state, |c| {
+        let (total, free) = storage::storage_info(c, &path)?;
+        Ok(StorageInfo {
+            total_space: total,
+            free_space: free,
+        })
+    })
+}
+
+/// Get the modification timestamp of a file (Unix epoch seconds).
+#[tauri::command]
+pub fn storage_timestamp(path: String, state: State<AppState>) -> Result<u32> {
+    with_client(&state, |c| storage::storage_timestamp(c, &path))
+}
+
+/// Cancel an in-progress transfer (read or write).
+/// Sets the `transfer_cancelled` flag; the next loop iteration of storage_read/write checks it.
+#[tauri::command]
+pub fn cancel_transfer(state: State<AppState>) -> Result<()> {
+    state
+        .transfer_cancelled
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Extract a .tar archive on the Flipper.
+#[tauri::command]
+pub fn storage_tar_extract(
+    tar_path: String,
+    out_path: String,
+    state: State<AppState>,
+) -> Result<()> {
+    with_client(&state, |c| storage::storage_tar_extract(c, &tar_path, &out_path))
 }

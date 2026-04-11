@@ -28,6 +28,12 @@ pub enum FlipperError {
 
     #[error("Session startup failed: {0}")]
     Session(String),
+
+    #[error("Device is in CLI mode — disconnect terminal first")]
+    CliModeActive,
+
+    #[error("Transfer cancelled")]
+    TransferCancelled,
 }
 
 // serde::Serialize is required so FlipperError can be returned from #[tauri::command]

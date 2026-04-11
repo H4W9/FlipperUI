@@ -100,6 +100,52 @@ pub fn get_device_info(client: &mut FlipperClient) -> Result<HashMap<String, Str
     Ok(info)
 }
 
+/// Get power/battery info from the Flipper. Returns key-value pairs
+/// (e.g. "charge", "health", "voltage", "current", "temperature").
+pub fn get_power_info(client: &mut FlipperClient) -> Result<HashMap<String, String>> {
+    let id = client.next_command_id();
+    let req = pb::Main {
+        command_id: id,
+        command_status: 0,
+        has_next: false,
+        content: Some(Content::SystemPowerInfoRequest(
+            pb_system::PowerInfoRequest {},
+        )),
+    };
+    write_message(&mut *client.port, &req)?;
+
+    let mut info = HashMap::new();
+    loop {
+        let msg = read_message(&mut *client.port)?;
+        check_response(&msg, id)?;
+        if let Some(Content::SystemPowerInfoResponse(r)) = msg.content {
+            info.insert(r.key, r.value);
+        }
+        if !msg.has_next {
+            break;
+        }
+    }
+    Ok(info)
+}
+
+/// Reboot the Flipper Zero.
+/// mode: 0 = OS (normal), 1 = DFU, 2 = UPDATE
+pub fn reboot(client: &mut FlipperClient, mode: i32) -> Result<()> {
+    let id = client.next_command_id();
+    let req = pb::Main {
+        command_id: id,
+        command_status: 0,
+        has_next: false,
+        content: Some(Content::SystemRebootRequest(pb_system::RebootRequest {
+            mode,
+        })),
+    };
+    write_message(&mut *client.port, &req)?;
+    // Device reboots immediately — no response expected.
+    // The serial port will disconnect.
+    Ok(())
+}
+
 /// Validate that a response belongs to the expected command and has OK status.
 /// Every RPC call site should use this instead of bare status checks.
 pub fn check_response(msg: &pb::Main, expected_id: u32) -> Result<()> {
