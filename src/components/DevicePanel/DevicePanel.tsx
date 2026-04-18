@@ -3,6 +3,7 @@ import { Usb, RefreshCw, Power, Battery, HardDrive } from "lucide-react";
 import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -30,10 +31,12 @@ export function DevicePanel() {
   const [sdTotal, setSdTotal] = useState<number | null>(null);
   const [sdFree, setSdFree] = useState<number | null>(null);
 
-  // Track the last-connected port for auto-reconnect
-  const [lastConnectedPort, setLastConnectedPort] = useState<string | null>(null);
+  // Track whether the user manually disconnected — suppresses auto-connect
+  // until the device is physically unplugged and re-plugged.
+  const [userDisconnected, setUserDisconnected] = useState(false);
+  const [showRebootConfirm, setShowRebootConfirm] = useState(false);
 
-  // Poll for port changes every 2 seconds + auto-reconnect
+  // Poll for port changes every 2 seconds + auto-connect
   useEffect(() => {
     const poll = async () => {
       try {
@@ -41,30 +44,31 @@ export function DevicePanel() {
         setPorts(p);
 
         const state = useFlipperStore.getState();
+        const flipper = p.find((x) => x.is_flipper);
 
         // Auto-select first Flipper port if none selected
-        if (!state.selectedPort) {
-          const flipper = p.find((x) => x.is_flipper);
-          if (flipper) {
-            setSelectedPort(flipper.name);
-          }
+        if (!state.selectedPort && flipper) {
+          setSelectedPort(flipper.name);
         }
 
-        // Auto-reconnect: if we were connected, port disappeared, and now it's back
-        if (!state.isConnected && !state.isConnecting && lastConnectedPort) {
-          const portBack = p.find((x) => x.name === lastConnectedPort);
-          if (portBack) {
-            setSelectedPort(lastConnectedPort);
-            setConnecting(true);
-            setError(null);
-            try {
-              const info = await connect(lastConnectedPort);
-              setConnected(info);
-            } catch {
-              setConnecting(false);
-              // Port appeared but connection failed — stop retrying
-              setLastConnectedPort(null);
-            }
+        // Clear userDisconnected when no Flipper ports are present
+        // (device was physically unplugged)
+        if (!flipper && userDisconnected) {
+          setUserDisconnected(false);
+        }
+
+        // Auto-connect: Flipper detected, not connected, not connecting,
+        // and user hasn't manually disconnected
+        if (flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
+          const port = state.selectedPort ?? flipper.name;
+          setSelectedPort(port);
+          setConnecting(true);
+          setError(null);
+          try {
+            const info = await connect(port);
+            setConnected(info);
+          } catch {
+            setConnecting(false);
           }
         }
 
@@ -74,7 +78,7 @@ export function DevicePanel() {
           if (!stillPresent) {
             try { await disconnect(); } catch { /* ignore */ }
             setConnected(null);
-            // lastConnectedPort stays set so we auto-reconnect when it returns
+            // userDisconnected stays false so we auto-reconnect when it returns
           }
         }
       } catch {
@@ -84,7 +88,7 @@ export function DevicePanel() {
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, lastConnectedPort]);
+  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected]);
 
   // Fetch power + storage info after connection
   useEffect(() => {
@@ -120,12 +124,12 @@ export function DevicePanel() {
 
   const handleConnect = async () => {
     if (!selectedPort) return;
+    setUserDisconnected(false);
     setConnecting(true);
     setError(null);
     try {
       const info = await connect(selectedPort);
       setConnected(info);
-      setLastConnectedPort(selectedPort);
     } catch (e: unknown) {
       setError(String(e));
       setConnecting(false);
@@ -133,7 +137,7 @@ export function DevicePanel() {
   };
 
   const handleDisconnect = async () => {
-    setLastConnectedPort(null); // don't auto-reconnect after manual disconnect
+    setUserDisconnected(true); // suppress auto-connect until re-plug
     try {
       await disconnect();
     } catch {
@@ -143,13 +147,14 @@ export function DevicePanel() {
   };
 
   const handleReboot = async () => {
-    // Keep lastConnectedPort so we auto-reconnect after reboot
+    // userDisconnected stays false so we auto-reconnect after reboot
     try {
       await reboot(0); // 0 = normal OS reboot
     } catch {
       // Expected — device disconnects immediately
     }
     setConnected(null);
+    setShowRebootConfirm(false);
   };
 
   const sdUsedPct =
@@ -178,7 +183,6 @@ export function DevicePanel() {
         {ports.map((p) => (
           <option key={p.name} value={p.name}>
             {p.name}
-            {p.is_flipper ? " (Flipper)" : ""}
           </option>
         ))}
       </select>
@@ -243,7 +247,7 @@ export function DevicePanel() {
 
           {/* Reboot button */}
           <button
-            onClick={handleReboot}
+            onClick={() => setShowRebootConfirm(true)}
             className="p-1 text-muted hover:text-accent rounded transition-colors"
             title="Reboot device"
           >
@@ -264,6 +268,17 @@ export function DevicePanel() {
       >
         <RefreshCw size={14} />
       </button>
+
+      {showRebootConfirm && (
+        <ConfirmDialog
+          title="Reboot Device"
+          message="The Flipper Zero will restart. It will auto-reconnect when it comes back."
+          confirmLabel="Reboot"
+          destructive
+          onConfirm={handleReboot}
+          onCancel={() => setShowRebootConfirm(false)}
+        />
+      )}
     </div>
   );
 }

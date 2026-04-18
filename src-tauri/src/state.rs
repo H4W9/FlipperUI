@@ -1,5 +1,5 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 
 use crate::flipper::client::FlipperClient;
 
@@ -9,27 +9,44 @@ pub enum ConnectionMode {
     Cli,
 }
 
+/// Shared slot holding the current screen-stream input-event sender (if the
+/// reader thread is running). Cleared by the reader when it exits and by
+/// connect/disconnect for safety.
+pub type InputEventTx = Arc<Mutex<Option<mpsc::Sender<(i32, i32)>>>>;
+
 pub struct AppState {
-    /// The connected Flipper client. Wrapped in Arc so the CLI reader thread
+    /// The connected Flipper client. Wrapped in Arc so background threads
     /// can share access without holding a reference to the full AppState.
     pub client: Arc<Mutex<Option<FlipperClient>>>,
-    pub mode: Mutex<ConnectionMode>,
+    pub mode: Arc<Mutex<ConnectionMode>>,
     /// Signals the CLI reader thread to stop.
     pub cli_reader_active: Arc<AtomicBool>,
     /// Signals an in-progress transfer (read/write) to abort.
     pub transfer_cancelled: Arc<AtomicBool>,
     /// Signals the screen stream reader thread to stop.
     pub screen_stream_active: Arc<AtomicBool>,
+    /// Channel for sending input events through the screen reader thread,
+    /// avoiding mutex contention between send_input_event and the reader loop.
+    /// `Arc` so both the Tauri command handler and the reader thread can hold
+    /// a reference — the reader clears this slot when it exits.
+    pub input_event_tx: InputEventTx,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             client: Arc::new(Mutex::new(None)),
-            mode: Mutex::new(ConnectionMode::Rpc),
+            mode: Arc::new(Mutex::new(ConnectionMode::Rpc)),
             cli_reader_active: Arc::new(AtomicBool::new(false)),
             transfer_cancelled: Arc::new(AtomicBool::new(false)),
             screen_stream_active: Arc::new(AtomicBool::new(false)),
+            input_event_tx: Arc::new(Mutex::new(None)),
         }
     }
 }

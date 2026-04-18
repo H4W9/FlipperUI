@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
@@ -8,6 +8,12 @@ import { cliStart, cliSend, cliStop } from "../../lib/tauri";
 const MIN_HEIGHT = 100;
 const MAX_HEIGHT = 600;
 const DEFAULT_HEIGHT = 208; // ~h-52
+
+// Module-level promise to track CLI cleanup - allows other operations to await
+let cliCleanupPromise: Promise<void> | null = null;
+
+/** Returns the current CLI cleanup promise, if any */
+export const getCliCleanupPromise = () => cliCleanupPromise;
 
 export function CliPanel() {
   const {
@@ -27,11 +33,20 @@ export function CliPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isDragging = useRef(false);
+  const currentPathRef = useRef(currentPath);
+  useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
 
   // Auto-scroll to bottom when history changes
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  }, [cliHistory]);
+
+  // Virtualize CLI output - only render last N lines for performance
+  const VISIBLE_LINES = 200;
+  const visibleHistory = useMemo(() => {
+    if (cliHistory.length <= VISIBLE_LINES) return cliHistory;
+    return cliHistory.slice(-VISIBLE_LINES);
   }, [cliHistory]);
 
   // Enter CLI mode on mount, exit on unmount
@@ -47,8 +62,19 @@ export function CliPanel() {
         });
 
         await cliStart();
-        if (mounted) setCliConnected(true);
+
+        // Send empty command to trigger the CLI prompt
+        await new Promise((r) => setTimeout(r, 100));
+        await cliSend("").catch(() => {});
+
+        if (mounted) {
+          setCliConnected(true);
+          setTimeout(() => {
+            inputRef.current?.focus({ preventScroll: true });
+          }, 10);
+        }
       } catch (err) {
+        console.warn("[CLI] cliStart failed:", err);
         if (mounted) {
           addCliLine({
             type: "error",
@@ -61,14 +87,16 @@ export function CliPanel() {
     return () => {
       mounted = false;
       unlisten?.();
+      setCliConnected(false);
 
-      cliStop()
-        .then(() => {
-          setCliConnected(false);
-          refresh(currentPath);
+      const path = currentPathRef.current;
+      cliCleanupPromise = cliStop()
+        .catch((err) => {
+          console.error("[CLI] cliStop failed:", err);
         })
-        .catch(() => {
-          setCliConnected(false);
+        .finally(() => {
+          cliCleanupPromise = null;
+          refresh(path);
         });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,14 +133,17 @@ export function CliPanel() {
 
   const handleSubmit = async () => {
     const trimmed = input.trim();
-    if (!trimmed) {
-      await cliSend("").catch(() => {});
+
+    if (trimmed === "clear") {
+      clearCli();
       setInput("");
       return;
     }
 
-    if (trimmed === "clear") {
-      clearCli();
+    if (!cliConnected) return;
+
+    if (!trimmed) {
+      await cliSend("").catch(() => {});
       setInput("");
       return;
     }
@@ -175,6 +206,7 @@ export function CliPanel() {
         </span>
         <button
           onClick={() => setCliVisible(false)}
+          aria-label="Close terminal"
           className="p-0.5 text-muted hover:text-primary rounded transition-colors"
         >
           <X size={12} />
@@ -184,12 +216,12 @@ export function CliPanel() {
       {/* Output */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 py-1.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all"
+        className="flex-1 overflow-y-auto px-3 py-1.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all select-text cursor-text"
         onClick={() => inputRef.current?.focus()}
       >
-        {cliHistory.map((line, i) => (
+        {visibleHistory.map((line) => (
           <span
-            key={i}
+            key={line.id}
             className={
               line.type === "error" ? "text-danger" : "text-primary/80"
             }
@@ -207,11 +239,13 @@ export function CliPanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={!cliConnected}
-          className="flex-1 bg-transparent text-xs text-primary font-mono outline-none placeholder:text-dim disabled:opacity-40"
+          className={`flex-1 bg-transparent text-xs font-mono outline-none placeholder:text-dim transition-opacity ${
+            cliConnected ? "text-primary" : "text-dim opacity-40"
+          }`}
           placeholder={cliConnected ? "" : "connecting..."}
           spellCheck={false}
           autoComplete="off"
+          aria-label="CLI input"
         />
       </div>
     </div>

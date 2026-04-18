@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
@@ -9,47 +10,20 @@ import {
   storageDelete,
   storageRename,
 } from "../lib/tauri";
+import { base64ToUint8Array, uint8ArrayToBase64, joinPath } from "../lib/encoding";
 import { useFlipperStore } from "../store/useFlipperStore";
 
-function joinPath(base: string, name: string): string {
-  if (base === "/") return "/" + name;
-  return base.replace(/\/$/, "") + "/" + name;
-}
-
-function base64ToUint8Array(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  // Process in chunks to avoid call-stack overflows on large files
-  const CHUNK = 0x8000;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
-
 export function useStorage() {
-  const {
-    currentPath,
-    setEntries,
-    setLoading,
-    setError,
-    setTransferProgress,
-  } = useFlipperStore();
+  const setEntries = useFlipperStore((s) => s.setEntries);
+  const setLoading = useFlipperStore((s) => s.setLoading);
+  const setError = useFlipperStore((s) => s.setError);
+  const setTransferProgress = useFlipperStore((s) => s.setTransferProgress);
 
-  const refresh = async (path: string) => {
+  const refresh = useCallback(async (path: string) => {
     setLoading(true);
     setError(null);
     try {
       const entries = await storageList(path);
-      // Directories first, then alphabetical within each group
       entries.sort((a, b) => {
         if (a.file_type !== b.file_type) return b.file_type - a.file_type;
         return a.name.localeCompare(b.name);
@@ -60,9 +34,10 @@ export function useStorage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setEntries, setLoading, setError]);
 
-  const download = async (name: string) => {
+  const download = useCallback(async (name: string) => {
+    const currentPath = useFlipperStore.getState().currentPath;
     const remotePath = joinPath(currentPath, name);
     let unlisten: (() => void) | undefined;
     let failed = false;
@@ -93,9 +68,10 @@ export function useStorage() {
         setTimeout(() => setTransferProgress(null), 600);
       }
     }
-  };
+  }, [setError, setTransferProgress]);
 
-  const uploadFile = async (localPath: string) => {
+  const uploadFile = useCallback(async (localPath: string) => {
+    const currentPath = useFlipperStore.getState().currentPath;
     let unlisten: (() => void) | undefined;
     let failed = false;
     try {
@@ -127,19 +103,19 @@ export function useStorage() {
         setTimeout(() => setTransferProgress(null), 600);
       }
     }
-  };
+  }, [setError, setTransferProgress, refresh]);
 
-  const upload = async () => {
+  const upload = useCallback(async () => {
     const selected = await open({ multiple: true });
     if (!selected) return;
-    // open() returns string | string[] depending on multiple flag
     const paths = Array.isArray(selected) ? selected : [selected];
     for (const path of paths) {
       await uploadFile(path);
     }
-  };
+  }, [uploadFile]);
 
-  const mkdir = async (name: string) => {
+  const mkdir = useCallback(async (name: string) => {
+    const currentPath = useFlipperStore.getState().currentPath;
     const path = joinPath(currentPath, name);
     try {
       await storageMkdir(path);
@@ -147,10 +123,11 @@ export function useStorage() {
     } catch (e: unknown) {
       setError(String(e));
     }
-  };
+  }, [setError, refresh]);
 
-  const rename = async (oldName: string, newName: string) => {
+  const rename = useCallback(async (oldName: string, newName: string) => {
     if (!newName.trim() || newName === oldName) return;
+    const currentPath = useFlipperStore.getState().currentPath;
     const oldPath = joinPath(currentPath, oldName);
     const newPath = joinPath(currentPath, newName.trim());
     try {
@@ -159,9 +136,10 @@ export function useStorage() {
     } catch (e: unknown) {
       setError(String(e));
     }
-  };
+  }, [setError, refresh]);
 
-  const remove = async (name: string, isDir: boolean) => {
+  const remove = useCallback(async (name: string, isDir: boolean) => {
+    const currentPath = useFlipperStore.getState().currentPath;
     const path = joinPath(currentPath, name);
     try {
       await storageDelete(path, isDir);
@@ -169,7 +147,7 @@ export function useStorage() {
     } catch (e: unknown) {
       setError(String(e));
     }
-  };
+  }, [setError, refresh]);
 
   return { refresh, download, upload, uploadFile, mkdir, rename, remove };
 }

@@ -37,14 +37,9 @@ pub fn stop_screen_stream(client: &mut FlipperClient) -> Result<()> {
     };
     write_message(&mut *client.port, &req)?;
     // Drain any pending frames
-    loop {
-        match read_message(&mut *client.port) {
-            Ok(msg) => {
-                if !msg.has_next {
-                    break;
-                }
-            }
-            Err(_) => break,
+    while let Ok(msg) = read_message(&mut *client.port) {
+        if !msg.has_next {
+            break;
         }
     }
     Ok(())
@@ -89,8 +84,32 @@ where
     Ok(())
 }
 
-/// Convert Flipper XBM screen data (1-bit per pixel, 128x64) to RGBA pixels.
-/// Returns a Vec<u8> of length 128*64*4.
+/// Send a single input event to the Flipper (key press/release/short/long).
+/// key: InputKey enum value (UP=0, DOWN=1, RIGHT=2, LEFT=3, OK=4, BACK=5)
+/// input_type: InputType enum value (PRESS=0, RELEASE=1, SHORT=2, LONG=3, REPEAT=4)
+pub fn send_input_event(client: &mut FlipperClient, key: i32, input_type: i32) -> Result<()> {
+    let id = client.next_command_id();
+    let req = pb::Main {
+        command_id: id,
+        command_status: 0,
+        has_next: false,
+        content: Some(Content::GuiSendInputEventRequest(
+            pb_gui::SendInputEventRequest {
+                key,
+                r#type: input_type,
+            },
+        )),
+    };
+    write_message(&mut *client.port, &req)?;
+    Ok(())
+}
+
+/// Convert Flipper screen data (1-bit per pixel, 128x64) to RGBA pixels.
+///
+/// The Flipper sends the raw u8g2 tile buffer: 8 pages of 128 bytes, where each
+/// byte packs 8 vertical pixels of one column (bit 0 = top row of the page,
+/// bit 7 = bottom row). So for pixel (x, y): `byte = (y/8)*128 + x`, `bit = y%8`.
+/// This matches qFlipper's screenstreamer decoder.
 pub fn xbm_to_rgba(data: &[u8], fg: u32, bg: u32) -> Vec<u8> {
     let width = 128;
     let height = 64;
@@ -105,8 +124,8 @@ pub fn xbm_to_rgba(data: &[u8], fg: u32, bg: u32) -> Vec<u8> {
 
     for y in 0..height {
         for x in 0..width {
-            let byte_idx = y * (width / 8) + x / 8;
-            let bit_idx = x % 8;
+            let byte_idx = (y / 8) * width + x;
+            let bit_idx = y % 8;
             let pixel_on = if byte_idx < data.len() {
                 (data[byte_idx] >> bit_idx) & 1 == 1
             } else {

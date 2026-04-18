@@ -31,13 +31,88 @@ pub mod pb {
 }
 
 use state::AppState;
+use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::Emitter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+    
+    tracing::info!("FlipperUI starting up");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_drag::init())
         .manage(AppState::new())
+        .setup(|app| {
+            // Custom app-menu with a "Settings…" item (Cmd+,). Clicking it
+            // emits "open-settings" so the frontend can open the dialog.
+            // We also reconstruct the standard Edit + Window submenus so
+            // Cut/Copy/Paste and Minimize/Close keep working — replacing the
+            // default menu drops those unless we add them back.
+            let about_meta = AboutMetadataBuilder::new()
+                .name(Some("FlipperUI"))
+                .version(Some(env!("CARGO_PKG_VERSION")))
+                .copyright(Some("in love -maz"))
+                .build();
+
+            let settings = MenuItemBuilder::with_id("settings", "Settings…")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
+            let app_submenu = SubmenuBuilder::new(app, "FlipperUI")
+                .item(&PredefinedMenuItem::about(
+                    app,
+                    Some("About FlipperUI"),
+                    Some(about_meta),
+                )?)
+                .separator()
+                .item(&settings)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            let window_submenu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .separator()
+                .close_window()
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .items(&[&app_submenu, &edit_submenu, &window_submenu])
+                .build()?;
+            app.set_menu(menu)?;
+
+            app.on_menu_event(|app, event| {
+                if event.id().as_ref() == "settings" {
+                    let _ = app.emit("open-settings", ());
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::device::list_ports,
             commands::device::connect,
@@ -60,6 +135,11 @@ pub fn run() {
             commands::cli::cli_stop,
             commands::gui::screen_stream_start,
             commands::gui::screen_stream_stop,
+            commands::gui::send_input_event,
+            commands::diag::diag_enable,
+            commands::diag::diag_entries,
+            commands::diag::diag_clear,
+            commands::diag::diag_is_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

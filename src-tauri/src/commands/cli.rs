@@ -10,14 +10,25 @@ use crate::state::{AppState, ConnectionMode};
 
 /// Enter CLI mode: stop the RPC session and start a reader thread that
 /// emits `"cli-output"` events for every chunk of text the Flipper sends.
+///
+/// This is intentionally synchronous — the working serial I/O is brief and
+/// spawn_blocking introduces issues with poll(POLLOUT) on macOS USB CDC.
 #[tauri::command]
 pub fn cli_start(state: State<AppState>, app: AppHandle) -> Result<()> {
     // Check mode
     {
         let mode = state.mode.lock().unwrap();
         if *mode == ConnectionMode::Cli {
-            return Ok(()); // already in CLI mode
+            return Ok(());
         }
+    }
+
+    // Stop screen stream if active — it conflicts with CLI mode
+    if state.screen_stream_active.swap(false, Ordering::SeqCst) {
+        tracing::info!("CLI: stopping active screen stream before entering CLI");
+        // Clear input event channel
+        let mut tx_guard = state.input_event_tx.lock().unwrap();
+        *tx_guard = None;
     }
 
     // Enter CLI mode on the serial port
@@ -36,7 +47,6 @@ pub fn cli_start(state: State<AppState>, app: AppHandle) -> Result<()> {
     // Activate the reader thread
     state.cli_reader_active.store(true, Ordering::Relaxed);
 
-    // Clone what the reader thread needs
     let active = Arc::clone(&state.cli_reader_active);
     let client_mutex = Arc::clone(&state.client);
 
@@ -49,8 +59,6 @@ pub fn cli_start(state: State<AppState>, app: AppHandle) -> Result<()> {
 
 /// Send a text command to the Flipper CLI.
 /// The command is written as raw bytes followed by `\r`.
-/// The Flipper echoes the input and sends its response, which the reader
-/// thread picks up and emits as `"cli-output"` events.
 #[tauri::command]
 pub fn cli_send(input: String, state: State<AppState>) -> Result<()> {
     {
@@ -70,28 +78,57 @@ pub fn cli_send(input: String, state: State<AppState>) -> Result<()> {
 }
 
 /// Leave CLI mode: stop the reader thread and re-enter RPC mode.
+/// Kept async because exit_cli_mode involves serial I/O that can take a few seconds.
 #[tauri::command]
-pub fn cli_stop(state: State<AppState>) -> Result<()> {
-    // Signal the reader thread to stop
-    state.cli_reader_active.store(false, Ordering::Relaxed);
+pub async fn cli_stop(state: State<'_, AppState>) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cli_reader_active = Arc::clone(&state.cli_reader_active);
 
-    // Give the reader thread time to exit (it has a 50ms port timeout + 10ms sleep)
-    std::thread::sleep(Duration::from_millis(150));
+    tauri::async_runtime::spawn_blocking(move || -> Result<()> {
+        // Signal the reader thread to stop
+        cli_reader_active.store(false, Ordering::SeqCst);
 
-    // Re-enter RPC mode
-    {
-        let mut guard = state.client.lock().unwrap();
-        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-        cli::exit_cli_mode(client)?;
-    }
+        // Check if we're actually in CLI mode
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode != ConnectionMode::Cli {
+                return Ok(());
+            }
+        }
 
-    // Update mode
-    {
-        let mut mode = state.mode.lock().unwrap();
-        *mode = ConnectionMode::Rpc;
-    }
+        // Re-enter RPC mode
+        let exit_result = {
+            let mut guard = client_mutex.lock().unwrap();
+            let client = match guard.as_mut() {
+                Some(c) => c,
+                None => {
+                    let mut mode = mode_mutex.lock().unwrap();
+                    *mode = ConnectionMode::Rpc;
+                    return Ok(());
+                }
+            };
 
-    Ok(())
+            match cli::exit_cli_mode(client) {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    tracing::error!("CLI: exit_cli_mode failed: {}, tearing down connection", e);
+                    *guard = None;
+                    Err(e)
+                }
+            }
+        };
+
+        // Always reset mode to Rpc
+        {
+            let mut mode = mode_mutex.lock().unwrap();
+            *mode = ConnectionMode::Rpc;
+        }
+
+        exit_result
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Background loop that reads from the serial port and emits text as events.
@@ -117,7 +154,6 @@ fn cli_reader_loop(
                     Err(e) => Some(Err(e)),
                 }
             } else {
-                // Client gone — exit
                 break;
             }
         };
@@ -128,7 +164,6 @@ fn cli_reader_loop(
                 let _ = app.emit("cli-output", &text);
             }
             Some(Err(_)) => {
-                // Serial error — device likely disconnected
                 let _ = app.emit(
                     "cli-output",
                     "\r\n[serial error — device disconnected]\r\n",
@@ -136,9 +171,7 @@ fn cli_reader_loop(
                 active.store(false, Ordering::Relaxed);
                 break;
             }
-            None => {
-                // No data available — brief sleep to avoid busy-spinning
-            }
+            None => {}
         }
 
         std::thread::sleep(Duration::from_millis(10));

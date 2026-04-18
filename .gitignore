@@ -1,30 +1,56 @@
-# Logs
-logs
-*.log
+# Node / npm
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Vite
+dist/
+dist-ssr/
+.vite/
 *.local
 
+# TypeScript
+*.tsbuildinfo
 
-# Editor directories and files
+# Test / coverage
+coverage/
+
+# Caches
+.eslintcache
+.stylelintcache
+.cache/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Tauri / Rust (src-tauri has its own .gitignore for target/ and gen/schemas)
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE (keep shared .vscode/extensions.json)
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-#
-.claude*
+# Claude Code / AI agent config (local, not project source)
+.claude/
+.remember/
 CLAUDE.md
 AGENTS.md

@@ -29,9 +29,13 @@ TODO - OPEN
 ______________________________
 
 --- NEW FEATURES ---
-[ ] file drag-out - drag files FROM file browser to Finder (requires @crabnebula-dev/tauri-plugin-drag)
-[ ] send input events to flipper via screen viewer (button clicks for Up/Down/Left/Right/OK/Back)
-[ ] screen capture - save current flipper screen as PNG
+[ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
+[ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
+
+--- SUBGHZ ---
+[ ] subghz library view - parse .sub files under /ext/subghz (Filetype/Frequency/Preset/Protocol/Bit/Key/RAW_Data), table with freq/protocol/preset/modulation columns, filter by frequency or protocol
+[ ] subghz raw waveform preview - plot RAW_Data timing bursts on a canvas so captures are readable at a glance
+[ ] subghz one-click replay - Transmit button in the library → AppStartRequest("Sub-GHz", "-t <path>"), Stop button via AppExitRequest (no confirmation prompt)
 
 
 
@@ -67,3 +71,6 @@ ______________________________
 [x] virtual scrolling for directories with 1000+ files (@tanstack/react-virtual)
 [x] show file timestamps - lazy-loaded on hover via storageTimestamp, cached per session
 [x] screen streaming - live Flipper screen via StartScreenStreamRequest, XBM→RGBA rendering
+[x] send input events to flipper via screen viewer (D-pad + keyboard shortcuts in ScreenViewer)
+[x] screen capture - save current flipper screen as PNG via canvas.toDataURL
+[x] file drag-out - drag files FROM file browser to Finder via @crabnebula/tauri-plugin-drag

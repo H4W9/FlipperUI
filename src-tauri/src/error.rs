@@ -34,6 +34,9 @@ pub enum FlipperError {
 
     #[error("Transfer cancelled")]
     TransferCancelled,
+
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 // serde::Serialize is required so FlipperError can be returned from #[tauri::command]

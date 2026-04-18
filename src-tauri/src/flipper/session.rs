@@ -1,21 +1,19 @@
 use std::collections::HashMap;
-use std::time::Duration;
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::flipper::framing::{read_message, write_message};
+use crate::flipper::{SERIAL_TIMEOUT_DRAIN, SERIAL_TIMEOUT_NORMAL};
 use crate::pb;
 use crate::pb::main::Content;
 use crate::pb_system;
 
 const SESSION_CMD: &[u8] = b"start_rpc_session\r";
-const NORMAL_TIMEOUT: Duration = Duration::from_secs(5);
-const DRAIN_TIMEOUT: Duration = Duration::from_millis(200);
 
 /// Open a serial port, perform the RPC session handshake, and return a connected client.
 pub fn open_session(port_name: &str) -> Result<FlipperClient> {
     let port = serialport::new(port_name, 230400)
-        .timeout(DRAIN_TIMEOUT)
+        .timeout(SERIAL_TIMEOUT_DRAIN)
         .open()?;
 
     let mut client = FlipperClient::new(port);
@@ -30,14 +28,14 @@ pub fn open_session(port_name: &str) -> Result<FlipperClient> {
     }
 
     // Switch to normal timeout for the session handshake
-    client.port.set_timeout(NORMAL_TIMEOUT)?;
+    client.port.set_timeout(SERIAL_TIMEOUT_NORMAL)?;
 
     // Send RPC session start command (CR only — the Flipper CLI expects \r not \r\n)
     client.port.write_all(SESSION_CMD)?;
     client.port.flush()?;
 
     // Wait for the device to acknowledge with a newline.
-    // The serial port already has NORMAL_TIMEOUT set, so read() will return
+    // The serial port already has SERIAL_TIMEOUT_NORMAL set, so read() will return
     // TimedOut if no bytes arrive within 5 seconds — no manual deadline needed.
     let mut byte = [0u8; 1];
     loop {

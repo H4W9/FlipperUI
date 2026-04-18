@@ -21,7 +21,7 @@ interface FlipperStore {
   // CLI state
   cliVisible: boolean;
   cliConnected: boolean;
-  cliHistory: Array<{ type: "input" | "output" | "error"; text: string }>;
+  cliHistory: Array<{ id: number; type: "input" | "output" | "error"; text: string }>;
 
   // Screen viewer state
   screenVisible: boolean;
@@ -42,6 +42,8 @@ interface FlipperStore {
   clearCli: () => void;
   setScreenVisible: (visible: boolean) => void;
 }
+
+let cliLineId = 0;
 
 export const useFlipperStore = create<FlipperStore>((set) => ({
   ports: [],
@@ -81,8 +83,9 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setCliConnected: (cliConnected) => set({ cliConnected }),
   addCliLine: (line) =>
     set((s) => {
-      const MAX_CLI_LINES = 5000;
-      const history = [...s.cliHistory, line];
+      const MAX_CLI_LINES = 1000; // Reduced from 5000 for memory efficiency
+      const entry = { ...line, id: cliLineId++ };
+      const history = [...s.cliHistory, entry];
       return { cliHistory: history.length > MAX_CLI_LINES ? history.slice(-MAX_CLI_LINES) : history };
     }),
   clearCli: () => set({ cliHistory: [] }),

@@ -1,6 +1,7 @@
 use prost::Message;
 use serialport::SerialPort;
 use crate::error::{FlipperError, Result};
+use crate::flipper::diag;
 use crate::pb;
 
 /// Read a protobuf-style varint from the serial port.
@@ -56,7 +57,9 @@ pub fn read_message(port: &mut dyn SerialPort) -> Result<pb::Main> {
     let len = read_varint(port)?;
     let mut buf = vec![0u8; len as usize];
     port.read_exact(&mut buf)?;
-    Ok(pb::Main::decode(buf.as_slice())?)
+    let msg = pb::Main::decode(buf.as_slice())?;
+    diag::log(diag::Direction::Rx, &msg, len as usize);
+    Ok(msg)
 }
 
 /// Write one `PB.Main` message to the serial port with a varint length prefix.
@@ -67,6 +70,7 @@ pub fn write_message(port: &mut dyn SerialPort, msg: &pb::Main) -> Result<()> {
     port.write_all(&varint_buf[..varint_len])?;
     port.write_all(&encoded)?;
     port.flush()?;
+    diag::log(diag::Direction::Tx, msg, encoded.len());
     Ok(())
 }
 

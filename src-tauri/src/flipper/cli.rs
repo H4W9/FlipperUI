@@ -8,7 +8,7 @@ use crate::pb::main::Content;
 
 const CLI_READ_TIMEOUT: Duration = Duration::from_millis(50);
 const NORMAL_TIMEOUT: Duration = Duration::from_secs(5);
-const DRAIN_TIMEOUT: Duration = Duration::from_millis(200);
+const DRAIN_TIMEOUT: Duration = Duration::from_millis(50);
 
 /// Exit the protobuf RPC session and return the device to its text-based CLI.
 ///
@@ -25,12 +25,8 @@ pub fn enter_cli_mode(client: &mut FlipperClient) -> Result<()> {
     };
     write_message(&mut *client.port, &msg)?;
 
-    // Read the response — the device confirms and exits RPC mode.
-    // This may fail if the device drops out of RPC immediately, so we
-    // treat a timeout or decode error as acceptable.
     let _ = read_message(&mut *client.port);
 
-    // Drain any trailing protobuf/text bytes
     client.port.set_timeout(DRAIN_TIMEOUT)?;
     let mut drain_buf = [0u8; 256];
     loop {
@@ -40,7 +36,6 @@ pub fn enter_cli_mode(client: &mut FlipperClient) -> Result<()> {
         }
     }
 
-    // Set short timeout for the CLI reader thread's polling loop
     client.port.set_timeout(CLI_READ_TIMEOUT)?;
     Ok(())
 }
@@ -50,7 +45,6 @@ pub fn enter_cli_mode(client: &mut FlipperClient) -> Result<()> {
 /// Drains any pending CLI output, sends `start_rpc_session\r`,
 /// waits for the `\n` acknowledgment, and restores the normal timeout.
 pub fn exit_cli_mode(client: &mut FlipperClient) -> Result<()> {
-    // Drain pending CLI output
     client.port.set_timeout(DRAIN_TIMEOUT)?;
     let mut drain_buf = [0u8; 256];
     loop {
@@ -60,17 +54,15 @@ pub fn exit_cli_mode(client: &mut FlipperClient) -> Result<()> {
         }
     }
 
-    // Send the RPC session start command
     client.port.set_timeout(NORMAL_TIMEOUT)?;
     client.port.write_all(b"start_rpc_session\r")?;
     client.port.flush()?;
 
-    // Wait for the device to acknowledge with a newline
     let mut byte = [0u8; 1];
     loop {
         match client.port.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
-            Ok(_) => {} // consume echoed characters
+            Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 return Err(FlipperError::Session(
                     "Timed out waiting for RPC session acknowledgment".into(),

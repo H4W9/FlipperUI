@@ -18,9 +18,13 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import { tempDir } from "@tauri-apps/api/path";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
-import { storageTarExtract, storageTimestamp } from "../../lib/tauri";
+import { storageRead, storageTarExtract, storageTimestamp } from "../../lib/tauri";
+import { base64ToUint8Array, joinPath } from "../../lib/encoding";
 import { Spinner } from "../ui/Spinner";
 import type { FileEntry } from "../../types/flipper";
 
@@ -36,11 +40,6 @@ function formatSize(bytes: number): string {
 function isTarFile(name: string): boolean {
   const lower = name.toLowerCase();
   return lower.endsWith(".tar") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz");
-}
-
-function joinPath(base: string, name: string): string {
-  if (base === "/") return "/" + name;
-  return base.replace(/\/$/, "") + "/" + name;
 }
 
 // ── Sort helpers ─────────────────────────────────────────────────────────────
@@ -126,10 +125,13 @@ function ContextMenu({
   return (
     <div
       ref={ref}
+      role="menu"
+      aria-label="File actions"
       style={style}
       className="w-40 bg-surface border border-elevated rounded shadow-xl py-1 text-primary"
     >
       <div
+        role="menuitem"
         className={item}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -141,6 +143,7 @@ function ContextMenu({
       </div>
       {!isDir && (
         <div
+          role="menuitem"
           className={item}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -153,6 +156,7 @@ function ContextMenu({
       )}
       {isTar && (
         <div
+          role="menuitem"
           className={item}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -163,8 +167,9 @@ function ContextMenu({
           <Archive size={12} className="text-secondary" /> Extract here
         </div>
       )}
-      <div className="my-1 border-t border-elevated" />
+      <div className="my-1 border-t border-elevated" role="separator" />
       <div
+        role="menuitem"
         className={`${item} text-danger hover:text-danger/80 hover:bg-danger/10`}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -271,14 +276,33 @@ function FileRow({
     onSelect(entry.name, e);
   };
 
+  const handleDragStart = useCallback(async (e: React.DragEvent) => {
+    if (isDir) return;
+    e.preventDefault();
+    try {
+      const remotePath = joinPath(currentPath, entry.name);
+      const b64 = await storageRead(remotePath);
+      const bytes = base64ToUint8Array(b64);
+
+      const tmp = await tempDir();
+      const tmpFile = `${tmp}${entry.name}`;
+      await writeFile(tmpFile, bytes);
+      await startDrag({ item: [tmpFile], icon: "" });
+    } catch {
+      // Drag cancelled or download failed — silently ignore
+    }
+  }, [isDir, currentPath, entry.name]);
+
   return (
     <div
       style={style}
+      draggable={!isDir && !isRenaming}
       className={`flex items-center gap-2 px-3 border-b border-border-subtle/60 hover:bg-surface/40 group text-sm ${
         isDir && !isRenaming ? "cursor-pointer" : ""
       } ${isSelected ? "bg-surface/60" : ""}`}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
+      onDragStart={handleDragStart}
       onContextMenu={(e) => {
         e.preventDefault();
         onContextMenu(e, entry);
@@ -482,7 +506,16 @@ export function FileList() {
     [currentPath, refresh, setError],
   );
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — use refs so the listener is stable (registered once)
+  const selectedNamesRef = useRef(selectedNames);
+  selectedNamesRef.current = selectedNames;
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const filteredSortedRef = useRef(filteredSorted);
+  filteredSortedRef.current = filteredSorted;
+  const removeRef = useRef(remove);
+  removeRef.current = remove;
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in an input
@@ -491,24 +524,24 @@ export function FileList() {
 
       if (e.key === "Delete" || e.key === "Backspace") {
         // Delete selected files
-        if (selectedNames.size > 0) {
+        if (selectedNamesRef.current.size > 0) {
           e.preventDefault();
-          for (const name of selectedNames) {
-            const entry = entries.find((en) => en.name === name);
-            if (entry) remove(name, entry.file_type === 1);
+          for (const name of selectedNamesRef.current) {
+            const entry = entriesRef.current.find((en) => en.name === name);
+            if (entry) removeRef.current(name, entry.file_type === 1);
           }
           setSelectedNames(new Set());
         }
       } else if (e.key === "F2") {
         // Rename first selected
-        if (selectedNames.size === 1) {
+        if (selectedNamesRef.current.size === 1) {
           e.preventDefault();
-          setRenamingName([...selectedNames][0]);
+          setRenamingName([...selectedNamesRef.current][0]);
         }
       } else if ((e.metaKey || e.ctrlKey) && e.key === "a") {
         // Select all
         e.preventDefault();
-        setSelectedNames(new Set(filteredSorted.map((en) => en.name)));
+        setSelectedNames(new Set(filteredSortedRef.current.map((en) => en.name)));
       } else if (e.key === "Escape") {
         setSelectedNames(new Set());
         setRenamingName("");
@@ -516,7 +549,7 @@ export function FileList() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedNames, entries, filteredSorted, remove]);
+  }, []);
 
   if (isLoading) {
     return (

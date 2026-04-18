@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -27,109 +28,146 @@ pub struct DeviceInfo {
     pub firmware_build_date: Option<String>,
 }
 
-/// List all available serial ports, marking Flipper Zeros by VID/PID.
+/// List serial ports that belong to a Flipper Zero.
+/// Filters ports to only those with "usbmodemflip" in the port name.
 #[tauri::command]
 pub fn list_ports() -> Result<Vec<PortInfo>> {
+    // Note: list_ports is kept synchronous because serialport::available_ports()
+    // is typically fast (~10-50ms). If this becomes a bottleneck, we can move it
+    // to spawn_blocking later.
     let ports = serialport::available_ports()?;
     Ok(ports
         .into_iter()
-        .map(|p| {
-            let (vid, pid, manufacturer, is_flipper) = match &p.port_type {
+        .filter_map(|p| {
+            // Only include ports with "usbmodemflip" in the name
+            if !p.port_name.to_lowercase().contains("usbmodemflip") {
+                return None;
+            }
+            let (vid, pid, manufacturer) = match &p.port_type {
                 serialport::SerialPortType::UsbPort(usb) => {
-                    // Flipper Zero: VID 0x0483 (STMicroelectronics), PID 0x5740 (Virtual COM Port)
-                    let is_f = usb.vid == 0x0483 && usb.pid == 0x5740;
-                    (
-                        Some(usb.vid),
-                        Some(usb.pid),
-                        usb.manufacturer.clone(),
-                        is_f,
-                    )
+                    (Some(usb.vid), Some(usb.pid), usb.manufacturer.clone())
                 }
-                _ => (None, None, None, false),
+                _ => (None, None, None),
             };
-            PortInfo {
+            Some(PortInfo {
                 name: p.port_name,
-                is_flipper,
+                is_flipper: true,
                 vid,
                 pid,
                 manufacturer,
-            }
+            })
         })
         .collect())
 }
 
 /// Open a connection to the Flipper Zero on the given port.
 #[tauri::command]
-pub fn connect(port: String, state: State<AppState>) -> Result<DeviceInfo> {
-    // Clean up any previous sessions
-    state.cli_reader_active.store(false, Ordering::Relaxed);
-    state.screen_stream_active.store(false, Ordering::Relaxed);
-    {
-        let mut mode = state.mode.lock().unwrap();
-        *mode = ConnectionMode::Rpc;
-    }
+pub async fn connect(port: String, state: State<'_, AppState>) -> Result<DeviceInfo> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cli_reader_active = Arc::clone(&state.cli_reader_active);
+    let screen_stream_active = Arc::clone(&state.screen_stream_active);
+    let input_event_tx = Arc::clone(&state.input_event_tx);
 
-    let mut guard = state.client.lock().unwrap();
-    // Drop any existing connection first
-    *guard = None;
+    tauri::async_runtime::spawn_blocking(move || {
+        // Clean up any previous sessions
+        cli_reader_active.store(false, Ordering::Relaxed);
+        screen_stream_active.store(false, Ordering::Relaxed);
+        *input_event_tx.lock().unwrap() = None;
+        {
+            let mut mode = mode_mutex.lock().unwrap();
+            *mode = ConnectionMode::Rpc;
+        }
 
-    let mut client = session::open_session(&port)?;
-    let info_map = session::get_device_info(&mut client).unwrap_or_default();
-    *guard = Some(client);
+        let mut guard = client_mutex.lock().unwrap();
+        // Drop any existing connection first
+        *guard = None;
 
-    Ok(DeviceInfo {
-        port,
-        hardware_name: info_map.get("hardware_name").cloned(),
-        hardware_version: info_map.get("hardware_ver").cloned(),
-        firmware_version: info_map.get("software_version").cloned(),
-        firmware_build_date: info_map.get("software_build_date").cloned(),
+        let mut client = session::open_session(&port)?;
+        let info_map = session::get_device_info(&mut client).unwrap_or_default();
+        *guard = Some(client);
+
+        Ok(DeviceInfo {
+            port,
+            hardware_name: info_map.get("hardware_name").cloned(),
+            hardware_version: info_map.get("hardware_ver").cloned(),
+            firmware_version: info_map.get("software_version").cloned(),
+            firmware_build_date: info_map.get("software_build_date").cloned(),
+        })
     })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Close the current connection to the Flipper Zero.
 #[tauri::command]
-pub fn disconnect(state: State<AppState>) -> Result<()> {
-    // Stop any running CLI reader or screen stream thread
-    state.cli_reader_active.store(false, Ordering::Relaxed);
-    state.screen_stream_active.store(false, Ordering::Relaxed);
-    {
-        let mut mode = state.mode.lock().unwrap();
-        *mode = ConnectionMode::Rpc;
-    }
-    let mut guard = state.client.lock().unwrap();
-    *guard = None; // Drop closes the serial port
-    Ok(())
+pub async fn disconnect(state: State<'_, AppState>) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cli_reader_active = Arc::clone(&state.cli_reader_active);
+    let screen_stream_active = Arc::clone(&state.screen_stream_active);
+    let input_event_tx = Arc::clone(&state.input_event_tx);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        // Stop any running CLI reader or screen stream thread
+        cli_reader_active.store(false, Ordering::Relaxed);
+        screen_stream_active.store(false, Ordering::Relaxed);
+        *input_event_tx.lock().unwrap() = None;
+        {
+            let mut mode = mode_mutex.lock().unwrap();
+            *mode = ConnectionMode::Rpc;
+        }
+        let mut guard = client_mutex.lock().unwrap();
+        *guard = None; // Drop closes the serial port
+        Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Get power/battery info from the Flipper.
 /// Returns a key-value map (e.g. "charge", "voltage", "current", "temperature").
 #[tauri::command]
-pub fn power_info(state: State<AppState>) -> Result<HashMap<String, String>> {
-    let mode = state.mode.lock().unwrap();
-    if *mode == ConnectionMode::Cli {
-        return Err(FlipperError::CliModeActive);
-    }
-    drop(mode);
+pub async fn power_info(state: State<'_, AppState>) -> Result<HashMap<String, String>> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
 
-    let mut guard = state.client.lock().unwrap();
-    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-    session::get_power_info(client)
+    tauri::async_runtime::spawn_blocking(move || {
+        let mode = mode_mutex.lock().unwrap();
+        if *mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+        drop(mode);
+
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        session::get_power_info(client)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Reboot the Flipper Zero.
 /// mode: 0 = OS (normal reboot), 1 = DFU, 2 = UPDATE
 #[tauri::command]
-pub fn reboot(mode: i32, state: State<AppState>) -> Result<()> {
-    let conn_mode = state.mode.lock().unwrap();
-    if *conn_mode == ConnectionMode::Cli {
-        return Err(FlipperError::CliModeActive);
-    }
-    drop(conn_mode);
+pub async fn reboot(mode: i32, state: State<'_, AppState>) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
 
-    let mut guard = state.client.lock().unwrap();
-    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-    let result = session::reboot(client, mode);
-    // Device reboots immediately — drop the client since port is gone
-    *guard = None;
-    result
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn_mode = mode_mutex.lock().unwrap();
+        if *conn_mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+        drop(conn_mode);
+
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        let result = session::reboot(client, mode);
+        // Device reboots immediately — drop the client since port is gone
+        *guard = None;
+        result
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
