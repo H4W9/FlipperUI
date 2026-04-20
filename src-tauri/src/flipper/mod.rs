@@ -1,10 +1,16 @@
+pub mod app;
+pub mod apps;
 pub mod cli;
 pub mod client;
 pub mod diag;
+pub mod fap_icon;
 pub mod framing;
 pub mod gui;
+pub mod infrared;
+pub mod nfc;
 pub mod session;
 pub mod storage;
+pub mod subghz;
 
 use std::time::Duration;
 

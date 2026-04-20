@@ -24,6 +24,9 @@ pub struct DeviceInfo {
     pub port: String,
     pub hardware_name: Option<String>,
     pub hardware_version: Option<String>,
+    /// STM32 unique ID — stable per device, used as the cache key for
+    /// per-device state like the Sub-GHz library index.
+    pub hardware_uid: Option<String>,
     pub firmware_version: Option<String>,
     pub firmware_build_date: Option<String>,
 }
@@ -91,6 +94,7 @@ pub async fn connect(port: String, state: State<'_, AppState>) -> Result<DeviceI
             port,
             hardware_name: info_map.get("hardware_name").cloned(),
             hardware_version: info_map.get("hardware_ver").cloned(),
+            hardware_uid: info_map.get("hardware_uid").cloned(),
             firmware_version: info_map.get("software_version").cloned(),
             firmware_build_date: info_map.get("software_build_date").cloned(),
         })
@@ -120,6 +124,29 @@ pub async fn disconnect(state: State<'_, AppState>) -> Result<()> {
         let mut guard = client_mutex.lock().unwrap();
         *guard = None; // Drop closes the serial port
         Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+/// Get the full device info map from the Flipper — every key/value pair
+/// the firmware exposes (hardware_*, firmware_*, radio_*, etc.). Much richer
+/// than the subset we squeeze into [`DeviceInfo`] on connect.
+#[tauri::command]
+pub async fn device_info_all(state: State<'_, AppState>) -> Result<HashMap<String, String>> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mode = mode_mutex.lock().unwrap();
+        if *mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+        drop(mode);
+
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        session::get_device_info(client)
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?

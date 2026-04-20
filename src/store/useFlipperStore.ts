@@ -1,7 +1,25 @@
 import { create } from "zustand";
 import type { DeviceInfo, FileEntry, PortInfo } from "../types/flipper";
+import type { ScanProgress, SubGhzEntry } from "../types/subghz";
+import type { IrEntry, IrScanProgress } from "../types/infrared";
+import type { NfcEntry, NfcScanProgress } from "../types/nfc";
+import type { AppEntry, AppIconEntry, AppScanProgress } from "../types/apps";
+
+export type ActiveView =
+  | "files"
+  | "subghz"
+  | "infrared"
+  | "nfc"
+  | "apps"
+  | "info"
+  | "cli"
+  | "screen"
+  | "settings";
 
 interface FlipperStore {
+  // Navigation
+  activeView: ActiveView;
+
   // Device state
   ports: PortInfo[];
   selectedPort: string | null;
@@ -19,14 +37,41 @@ interface FlipperStore {
   transferProgress: number | null;
 
   // CLI state
-  cliVisible: boolean;
   cliConnected: boolean;
   cliHistory: Array<{ id: number; type: "input" | "output" | "error"; text: string }>;
 
-  // Screen viewer state
-  screenVisible: boolean;
+  // Sub-GHz library
+  subghzEntries: SubGhzEntry[];
+  subghzScanning: boolean;
+  subghzProgress: ScanProgress | null;
+  subghzError: string | null;
+  /** Path of the .sub file currently being transmitted, or null when idle. */
+  subghzTransmittingPath: string | null;
+
+  // Infrared library
+  irEntries: IrEntry[];
+  irScanning: boolean;
+  irProgress: IrScanProgress | null;
+  irError: string | null;
+
+  // NFC library
+  nfcEntries: NfcEntry[];
+  nfcScanning: boolean;
+  nfcProgress: NfcScanProgress | null;
+  nfcError: string | null;
+
+  // App library
+  appEntries: AppEntry[];
+  appsScanning: boolean;
+  appsProgress: AppScanProgress | null;
+  appsError: string | null;
+  /** Path of the .fap currently being launched on-device, or null when idle. */
+  appsLaunchingPath: string | null;
+  /** Lazy-loaded per-app icons, keyed by .fap path. */
+  appIcons: Record<string, AppIconEntry>;
 
   // Actions
+  setActiveView: (view: ActiveView) => void;
   setPorts: (ports: PortInfo[]) => void;
   setSelectedPort: (port: string | null) => void;
   setConnecting: (connecting: boolean) => void;
@@ -36,16 +81,35 @@ interface FlipperStore {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setTransferProgress: (progress: number | null) => void;
-  setCliVisible: (visible: boolean) => void;
   setCliConnected: (connected: boolean) => void;
   addCliLine: (line: { type: "input" | "output" | "error"; text: string }) => void;
   clearCli: () => void;
-  setScreenVisible: (visible: boolean) => void;
+  setSubghzEntries: (entries: SubGhzEntry[]) => void;
+  setSubghzScanning: (scanning: boolean) => void;
+  setSubghzProgress: (progress: ScanProgress | null) => void;
+  setSubghzError: (error: string | null) => void;
+  setSubghzTransmittingPath: (path: string | null) => void;
+  setIrEntries: (entries: IrEntry[]) => void;
+  setIrScanning: (scanning: boolean) => void;
+  setIrProgress: (progress: IrScanProgress | null) => void;
+  setIrError: (error: string | null) => void;
+  setNfcEntries: (entries: NfcEntry[]) => void;
+  setNfcScanning: (scanning: boolean) => void;
+  setNfcProgress: (progress: NfcScanProgress | null) => void;
+  setNfcError: (error: string | null) => void;
+  setAppEntries: (entries: AppEntry[]) => void;
+  setAppsScanning: (scanning: boolean) => void;
+  setAppsProgress: (progress: AppScanProgress | null) => void;
+  setAppsError: (error: string | null) => void;
+  setAppsLaunchingPath: (path: string | null) => void;
+  setAppIcons: (icons: Record<string, AppIconEntry>) => void;
+  setAppIcon: (path: string, entry: AppIconEntry) => void;
 }
 
 let cliLineId = 0;
 
 export const useFlipperStore = create<FlipperStore>((set) => ({
+  activeView: "files",
   ports: [],
   selectedPort: null,
   deviceInfo: null,
@@ -56,11 +120,29 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   isLoading: false,
   error: null,
   transferProgress: null,
-  cliVisible: false,
   cliConnected: false,
   cliHistory: [],
-  screenVisible: false,
+  subghzEntries: [],
+  subghzScanning: false,
+  subghzProgress: null,
+  subghzError: null,
+  subghzTransmittingPath: null,
+  irEntries: [],
+  irScanning: false,
+  irProgress: null,
+  irError: null,
+  nfcEntries: [],
+  nfcScanning: false,
+  nfcProgress: null,
+  nfcError: null,
+  appEntries: [],
+  appsScanning: false,
+  appsProgress: null,
+  appsError: null,
+  appsLaunchingPath: null,
+  appIcons: {},
 
+  setActiveView: (activeView) => set({ activeView }),
   setPorts: (ports) => set({ ports }),
   setSelectedPort: (selectedPort) => set({ selectedPort }),
   setConnecting: (isConnecting) => set({ isConnecting }),
@@ -69,9 +151,36 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
       deviceInfo,
       isConnected: deviceInfo !== null,
       isConnecting: false,
-      // Reset file browser on disconnect
+      // Reset file browser + subghz state on disconnect. Snap active view
+      // back to Files if the user was on a device-only pane (cli / screen) so
+      // they don't see a dead panel.
       ...(deviceInfo === null
-        ? { currentPath: "/ext", entries: [], error: null, cliVisible: false, cliConnected: false, cliHistory: [], screenVisible: false }
+        ? {
+            currentPath: "/ext",
+            entries: [],
+            error: null,
+            cliConnected: false,
+            cliHistory: [],
+            subghzEntries: [],
+            subghzScanning: false,
+            subghzProgress: null,
+            subghzError: null,
+            subghzTransmittingPath: null,
+            irEntries: [],
+            irScanning: false,
+            irProgress: null,
+            irError: null,
+            nfcEntries: [],
+            nfcScanning: false,
+            nfcProgress: null,
+            nfcError: null,
+            appEntries: [],
+            appsScanning: false,
+            appsProgress: null,
+            appsError: null,
+            appsLaunchingPath: null,
+            appIcons: {},
+          }
         : {}),
     }),
   setCurrentPath: (currentPath) => set({ currentPath }),
@@ -79,7 +188,6 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
   setTransferProgress: (transferProgress) => set({ transferProgress }),
-  setCliVisible: (cliVisible) => set({ cliVisible }),
   setCliConnected: (cliConnected) => set({ cliConnected }),
   addCliLine: (line) =>
     set((s) => {
@@ -89,5 +197,26 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
       return { cliHistory: history.length > MAX_CLI_LINES ? history.slice(-MAX_CLI_LINES) : history };
     }),
   clearCli: () => set({ cliHistory: [] }),
-  setScreenVisible: (screenVisible) => set({ screenVisible }),
+  setSubghzEntries: (subghzEntries) => set({ subghzEntries }),
+  setSubghzScanning: (subghzScanning) => set({ subghzScanning }),
+  setSubghzProgress: (subghzProgress) => set({ subghzProgress }),
+  setSubghzError: (subghzError) => set({ subghzError }),
+  setSubghzTransmittingPath: (subghzTransmittingPath) =>
+    set({ subghzTransmittingPath }),
+  setIrEntries: (irEntries) => set({ irEntries }),
+  setIrScanning: (irScanning) => set({ irScanning }),
+  setIrProgress: (irProgress) => set({ irProgress }),
+  setIrError: (irError) => set({ irError }),
+  setNfcEntries: (nfcEntries) => set({ nfcEntries }),
+  setNfcScanning: (nfcScanning) => set({ nfcScanning }),
+  setNfcProgress: (nfcProgress) => set({ nfcProgress }),
+  setNfcError: (nfcError) => set({ nfcError }),
+  setAppEntries: (appEntries) => set({ appEntries }),
+  setAppsScanning: (appsScanning) => set({ appsScanning }),
+  setAppsProgress: (appsProgress) => set({ appsProgress }),
+  setAppsError: (appsError) => set({ appsError }),
+  setAppsLaunchingPath: (appsLaunchingPath) => set({ appsLaunchingPath }),
+  setAppIcons: (appIcons) => set({ appIcons }),
+  setAppIcon: (path, entry) =>
+    set((s) => ({ appIcons: { ...s.appIcons, [path]: entry } })),
 }));

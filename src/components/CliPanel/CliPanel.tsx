@@ -1,13 +1,9 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { X } from "lucide-react";
+import { Terminal as TerminalIcon } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
 import { cliStart, cliSend, cliStop } from "../../lib/tauri";
-
-const MIN_HEIGHT = 100;
-const MAX_HEIGHT = 600;
-const DEFAULT_HEIGHT = 208; // ~h-52
 
 // Module-level promise to track CLI cleanup - allows other operations to await
 let cliCleanupPromise: Promise<void> | null = null;
@@ -21,7 +17,6 @@ export function CliPanel() {
     cliConnected,
     addCliLine,
     clearCli,
-    setCliVisible,
     setCliConnected,
     currentPath,
   } = useFlipperStore();
@@ -29,10 +24,8 @@ export function CliPanel() {
   const [input, setInput] = useState("");
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isDragging = useRef(false);
   const currentPathRef = useRef(currentPath);
   useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
 
@@ -107,30 +100,6 @@ export function CliPanel() {
     if (cliConnected) inputRef.current?.focus();
   }, [cliConnected]);
 
-  // Resize drag handling
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDragging.current = true;
-    const startY = e.clientY;
-    const startHeight = height;
-
-    const onMove = (ev: MouseEvent) => {
-      if (!isDragging.current) return;
-      const delta = startY - ev.clientY;
-      setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight + delta)));
-    };
-
-    const onUp = () => {
-      isDragging.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height]);
-
   const handleSubmit = async () => {
     const trimmed = input.trim();
 
@@ -186,31 +155,16 @@ export function CliPanel() {
   };
 
   return (
-    <div
-      className="flex flex-col border-t border-flipper bg-app shrink-0"
-      style={{ height }}
-    >
-      {/* Resize handle */}
-      <div
-        onMouseDown={handleDragStart}
-        className="h-1 cursor-ns-resize bg-surface hover:bg-accent/40 transition-colors shrink-0"
-      />
-
+    <div className="flex-1 min-h-0 flex flex-col bg-app overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1 border-b border-border-subtle bg-panel/50">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle bg-panel/50 shrink-0">
+        <TerminalIcon size={13} className="text-accent" />
         <span className="text-xs text-secondary font-medium">
           Terminal
           {!cliConnected && (
             <span className="ml-2 text-dim">connecting...</span>
           )}
         </span>
-        <button
-          onClick={() => setCliVisible(false)}
-          aria-label="Close terminal"
-          className="p-0.5 text-muted hover:text-primary rounded transition-colors"
-        >
-          <X size={12} />
-        </button>
       </div>
 
       {/* Output */}

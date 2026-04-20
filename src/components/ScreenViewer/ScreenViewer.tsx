@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { Monitor, X, Maximize2, Minimize2, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2 } from "lucide-react";
+import { Monitor, Maximize2, Minimize2, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2 } from "lucide-react";
 import { GIFEncoder, applyPalette } from "gifenc";
 import { screenStreamStart, screenStreamStop, sendInputEvent } from "../../lib/tauri";
 import { base64ToUint8Array } from "../../lib/encoding";
@@ -48,11 +48,7 @@ function DpadBtn({ icon, onPress, ariaLabel, label }: { icon: React.ReactNode; o
   );
 }
 
-interface ScreenViewerProps {
-  onClose: () => void;
-}
-
-export function ScreenViewer({ onClose }: ScreenViewerProps) {
+export function ScreenViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [connected, setConnected] = useState(false);
   const [scale, setScale] = useState(3); // 3x = 384x192
@@ -214,9 +210,9 @@ export function ScreenViewer({ onClose }: ScreenViewerProps) {
   const height = SCREEN_H * scale;
 
   return (
-    <div className="flex flex-col border border-flipper rounded-lg bg-panel shadow-2xl overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col bg-app overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-subtle bg-surface/50">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-subtle bg-panel/50 shrink-0">
         <div className="flex items-center gap-2">
           <Monitor size={13} className="text-accent" />
           <span className="text-xs text-secondary font-medium">
@@ -260,18 +256,11 @@ export function ScreenViewer({ onClose }: ScreenViewerProps) {
           >
             {isRecording ? <Square size={12} fill="currentColor" /> : <Circle size={12} />}
           </button>
-          <button
-            onClick={onClose}
-            aria-label="Close screen viewer"
-            className="p-0.5 text-muted hover:text-primary rounded transition-colors"
-          >
-            <X size={12} />
-          </button>
         </div>
       </div>
 
       {/* Canvas */}
-      <div className="p-2 bg-app flex items-center justify-center">
+      <div className="flex-1 min-h-0 p-4 bg-app flex items-center justify-center overflow-auto">
         {error ? (
           <div className="text-xs text-danger px-4 py-8">{error}</div>
         ) : (
@@ -299,7 +288,7 @@ export function ScreenViewer({ onClose }: ScreenViewerProps) {
 
       {/* D-pad */}
       {connected && (
-        <div className="flex items-center justify-between px-3 pb-2 gap-4">
+        <div className="flex items-center justify-center px-3 py-3 gap-4 border-t border-border-subtle bg-panel/30 shrink-0">
           {/* Directional pad */}
           <div className="grid grid-cols-3 grid-rows-3 gap-0.5">
             <div />

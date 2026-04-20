@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload, FolderPlus, RefreshCw, Check, X, Terminal, Monitor } from "lucide-react";
+import { Upload, FolderPlus, RefreshCw, Check, X } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
 
 export function Toolbar() {
-  const { currentPath, isLoading, cliVisible, setCliVisible, screenVisible, setScreenVisible } = useFlipperStore();
+  const { currentPath, isLoading } = useFlipperStore();
   const { upload, mkdir, refresh } = useStorage();
 
   // Ctrl+U to upload
@@ -93,20 +93,6 @@ export function Toolbar() {
 
       <div className="flex-1" />
       <span className="text-xs text-muted font-mono truncate max-w-xs">{currentPath}</span>
-      <button
-        onClick={() => setScreenVisible(!screenVisible)}
-        className={`p-1 rounded transition-colors shrink-0 ${screenVisible ? "text-accent" : "text-muted hover:text-primary"}`}
-        title="Toggle screen viewer"
-      >
-        <Monitor size={13} />
-      </button>
-      <button
-        onClick={() => setCliVisible(!cliVisible)}
-        className={`p-1 rounded transition-colors shrink-0 ${cliVisible ? "text-accent" : "text-muted hover:text-primary"}`}
-        title="Toggle terminal"
-      >
-        <Terminal size={13} />
-      </button>
       <button
         onClick={() => refresh(currentPath)}
         disabled={isLoading}

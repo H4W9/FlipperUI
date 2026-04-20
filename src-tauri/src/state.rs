@@ -25,6 +25,14 @@ pub struct AppState {
     pub transfer_cancelled: Arc<AtomicBool>,
     /// Signals the screen stream reader thread to stop.
     pub screen_stream_active: Arc<AtomicBool>,
+    /// Signals an in-progress SubGhz library scan to abort.
+    pub subghz_scan_cancelled: Arc<AtomicBool>,
+    /// Signals an in-progress Infrared library scan to abort.
+    pub ir_scan_cancelled: Arc<AtomicBool>,
+    /// Signals an in-progress App library scan to abort.
+    pub apps_scan_cancelled: Arc<AtomicBool>,
+    /// Signals an in-progress NFC library scan to abort.
+    pub nfc_scan_cancelled: Arc<AtomicBool>,
     /// Channel for sending input events through the screen reader thread,
     /// avoiding mutex contention between send_input_event and the reader loop.
     /// `Arc` so both the Tauri command handler and the reader thread can hold
@@ -46,6 +54,10 @@ impl AppState {
             cli_reader_active: Arc::new(AtomicBool::new(false)),
             transfer_cancelled: Arc::new(AtomicBool::new(false)),
             screen_stream_active: Arc::new(AtomicBool::new(false)),
+            subghz_scan_cancelled: Arc::new(AtomicBool::new(false)),
+            ir_scan_cancelled: Arc::new(AtomicBool::new(false)),
+            apps_scan_cancelled: Arc::new(AtomicBool::new(false)),
+            nfc_scan_cancelled: Arc::new(AtomicBool::new(false)),
             input_event_tx: Arc::new(Mutex::new(None)),
         }
     }

@@ -49,6 +49,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .manage(AppState::new())
         .setup(|app| {
             // Custom app-menu with a "Settings…" item (Cmd+,). Clicking it
@@ -129,6 +131,7 @@ pub fn run() {
             commands::storage::storage_tar_extract,
             commands::storage::cancel_transfer,
             commands::device::power_info,
+            commands::device::device_info_all,
             commands::device::reboot,
             commands::cli::cli_start,
             commands::cli::cli_send,
@@ -140,6 +143,19 @@ pub fn run() {
             commands::diag::diag_entries,
             commands::diag::diag_clear,
             commands::diag::diag_is_enabled,
+            commands::app::app_start,
+            commands::app::app_exit,
+            commands::app::subghz_tx_start,
+            commands::app::subghz_tx_stop,
+            commands::subghz::subghz_scan,
+            commands::subghz::subghz_cancel_scan,
+            commands::infrared::infrared_scan,
+            commands::infrared::infrared_cancel_scan,
+            commands::nfc::nfc_scan,
+            commands::nfc::nfc_cancel_scan,
+            commands::apps::apps_scan,
+            commands::apps::apps_cancel_scan,
+            commands::apps::apps_read_icon,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

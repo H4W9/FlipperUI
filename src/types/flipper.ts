@@ -12,6 +12,8 @@ export interface DeviceInfo {
   port: string;
   hardware_name: string | null;
   hardware_version: string | null;
+  /** STM32 unique ID — stable per device, used as the Sub-GHz cache key. */
+  hardware_uid: string | null;
   firmware_version: string | null;
   firmware_build_date: string | null;
 }

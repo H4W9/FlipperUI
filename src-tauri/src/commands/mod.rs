@@ -1,5 +1,10 @@
+pub mod app;
+pub mod apps;
 pub mod cli;
 pub mod device;
 pub mod diag;
 pub mod gui;
+pub mod infrared;
+pub mod nfc;
 pub mod storage;
+pub mod subghz;

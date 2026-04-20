@@ -4,6 +4,10 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { DeviceInfo, FileEntry, PortInfo, StorageInfo } from "../types/flipper";
+import type { SubGhzEntry } from "../types/subghz";
+import type { IrEntry } from "../types/infrared";
+import type { NfcEntry } from "../types/nfc";
+import type { AppEntry } from "../types/apps";
 import { getCliCleanupPromise } from "../components/CliPanel/CliPanel";
 
 // Helper to await any in-progress CLI cleanup before making RPC calls
@@ -94,6 +98,10 @@ export const cancelTransfer = (): Promise<void> =>
 export const powerInfo = (): Promise<Record<string, string>> =>
   invoke<Record<string, string>>("power_info");
 
+/** Full key/value map from RPC system.device_info — much richer than DeviceInfo. */
+export const deviceInfoAll = (): Promise<Record<string, string>> =>
+  invoke<Record<string, string>>("device_info_all");
+
 export const reboot = (mode: number): Promise<void> =>
   invoke<void>("reboot", { mode });
 
@@ -128,6 +136,144 @@ export const cliSend = (input: string): Promise<void> =>
 /** Leave CLI mode and re-enter RPC mode. */
 export const cliStop = (): Promise<void> =>
   invoke<void>("cli_stop");
+
+// ── App control (launch/exit Flipper apps) ──────────────────────────────
+
+/** Launch a Flipper app by name with optional CLI-style args. */
+export const appStart = async (name: string, args: string): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("app_start", { name, args });
+};
+
+/** Exit the currently running Flipper app. */
+export const appExit = async (): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("app_exit");
+};
+
+/**
+ * Begin Sub-GHz replay via the full RPC flow (Start → LoadFile → ButtonPress).
+ * TX continues until {@link subghzTxStop} is called. Mirrors the iOS app.
+ */
+export const subghzTxStart = async (path: string): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("subghz_tx_start", { path });
+};
+
+/** Stop an in-progress Sub-GHz replay (ButtonRelease + AppExit). */
+export const subghzTxStop = async (): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("subghz_tx_stop");
+};
+
+// ── Sub-GHz library ──────────────────────────────────────────────────────
+
+/**
+ * Scan a directory recursively for .sub files, parse their headers, and
+ * return the list. Emits "subghz-scan-progress" events as it works.
+ *
+ * `cached` — optional list of previously-parsed entries (from the on-disk
+ * cache). When supplied, files whose mtime hasn't changed are reused from
+ * cache instead of being re-read over serial.
+ */
+export const subghzScan = async (
+  root: string,
+  excludedDirs: string[],
+  cached?: SubGhzEntry[],
+): Promise<SubGhzEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<SubGhzEntry[]>("subghz_scan", {
+    root,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress SubGhz library scan. */
+export const subghzCancelScan = (): Promise<void> =>
+  invoke<void>("subghz_cancel_scan");
+
+// ── Infrared library ────────────────────────────────────────────────────
+
+/**
+ * Scan a directory recursively for .ir files, parse their signal blocks,
+ * and return the list. Emits "infrared-scan-progress" events as it works.
+ */
+export const infraredScan = async (
+  root: string,
+  excludedDirs: string[],
+  cached?: IrEntry[],
+): Promise<IrEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<IrEntry[]>("infrared_scan", {
+    root,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress Infrared library scan. */
+export const infraredCancelScan = (): Promise<void> =>
+  invoke<void>("infrared_cancel_scan");
+
+// ── NFC library ─────────────────────────────────────────────────────────
+
+/**
+ * Scan a directory recursively for `.nfc` files, parse their headers, and
+ * return the list. Emits "nfc-scan-progress" events as it works.
+ */
+export const nfcScan = async (
+  root: string,
+  excludedDirs: string[],
+  cached?: NfcEntry[],
+): Promise<NfcEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<NfcEntry[]>("nfc_scan", {
+    root,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress NFC library scan. */
+export const nfcCancelScan = (): Promise<void> =>
+  invoke<void>("nfc_cancel_scan");
+
+// ── Apps library ────────────────────────────────────────────────────────
+
+/**
+ * Scan one or more roots recursively for `.fap` files and return a parsed
+ * list. Emits "apps-scan-progress" events as it works.
+ *
+ * Pass previously-parsed entries as `cached` to skip re-reading files whose
+ * mtime hasn't moved.
+ */
+export const appsScan = async (
+  roots: string[],
+  excludedDirs: string[],
+  cached?: AppEntry[],
+): Promise<AppEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<AppEntry[]>("apps_scan", {
+    roots,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress App library scan. */
+export const appsCancelScan = (): Promise<void> =>
+  invoke<void>("apps_cancel_scan");
+
+/**
+ * Read a .fap and extract its embedded 10x10 icon. Returns base64-encoded
+ * raw XBM bytes (32-byte slot; first 20 bytes are the bitmap), or null if
+ * the file has no embedded icon.
+ */
+export const appsReadIcon = async (path: string): Promise<string | null> => {
+  await awaitCliCleanup();
+  return invoke<string | null>("apps_read_icon", { path });
+};
 
 // ── Diagnostics ─────────────────────────────────────────────────────────
 

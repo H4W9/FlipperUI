@@ -1,6 +1,6 @@
 [package]
 name = "flipperui"
-version = "0.1.1"
+version = "0.1.2"
 description = "FlipperUI - A Tauri-based qFlipper replacement"
 authors = ["marco"]
 edition = "2021"
@@ -25,5 +25,8 @@ serialport = "4"
 thiserror = "2"
 base64 = "0.22"
 tauri-plugin-drag = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+object = { version = "0.36", default-features = false, features = ["read_core", "elf", "std"] }
