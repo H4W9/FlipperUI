@@ -23,20 +23,20 @@ pub fn enter_cli_mode(client: &mut FlipperClient) -> Result<()> {
         has_next: false,
         content: Some(Content::StopSession(pb::StopSession {})),
     };
-    write_message(&mut *client.port, &msg)?;
+    write_message(&mut *client.transport, &msg)?;
 
-    let _ = read_message(&mut *client.port);
+    let _ = read_message(&mut *client.transport);
 
-    client.port.set_timeout(DRAIN_TIMEOUT)?;
+    client.transport.set_timeout(DRAIN_TIMEOUT)?;
     let mut drain_buf = [0u8; 256];
     loop {
-        match client.port.read(&mut drain_buf) {
+        match client.transport.read(&mut drain_buf) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
     }
 
-    client.port.set_timeout(CLI_READ_TIMEOUT)?;
+    client.transport.set_timeout(CLI_READ_TIMEOUT)?;
     Ok(())
 }
 
@@ -45,22 +45,22 @@ pub fn enter_cli_mode(client: &mut FlipperClient) -> Result<()> {
 /// Drains any pending CLI output, sends `start_rpc_session\r`,
 /// waits for the `\n` acknowledgment, and restores the normal timeout.
 pub fn exit_cli_mode(client: &mut FlipperClient) -> Result<()> {
-    client.port.set_timeout(DRAIN_TIMEOUT)?;
+    client.transport.set_timeout(DRAIN_TIMEOUT)?;
     let mut drain_buf = [0u8; 256];
     loop {
-        match client.port.read(&mut drain_buf) {
+        match client.transport.read(&mut drain_buf) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
     }
 
-    client.port.set_timeout(NORMAL_TIMEOUT)?;
-    client.port.write_all(b"start_rpc_session\r")?;
-    client.port.flush()?;
+    client.transport.set_timeout(NORMAL_TIMEOUT)?;
+    client.transport.write_all(b"start_rpc_session\r")?;
+    client.transport.flush()?;
 
     let mut byte = [0u8; 1];
     loop {
-        match client.port.read(&mut byte) {
+        match client.transport.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {

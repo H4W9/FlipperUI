@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Usb, RefreshCw, Power, Battery, HardDrive } from "lucide-react";
+import { Usb, RefreshCw, Power, Battery, HardDrive, Bluetooth } from "lucide-react";
 import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { BleDialog } from "./BleDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -35,6 +36,7 @@ export function DevicePanel() {
   // until the device is physically unplugged and re-plugged.
   const [userDisconnected, setUserDisconnected] = useState(false);
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
+  const [showBleDialog, setShowBleDialog] = useState(false);
 
   // Poll for port changes every 2 seconds + auto-connect
   useEffect(() => {
@@ -66,14 +68,21 @@ export function DevicePanel() {
           setError(null);
           try {
             const info = await connect(port);
-            setConnected(info);
+            setConnected(info, "serial");
           } catch {
             setConnecting(false);
           }
         }
 
-        // Detect disconnection: port disappeared while connected
-        if (state.isConnected && state.selectedPort) {
+        // Detect disconnection: USB port disappeared while connected via serial.
+        // BLE sessions are torn down by the backend (flipper-disconnected event),
+        // so the port-presence check must not run when the active transport
+        // isn't serial.
+        if (
+          state.isConnected &&
+          state.connectionKind === "serial" &&
+          state.selectedPort
+        ) {
           const stillPresent = p.some((x) => x.name === state.selectedPort);
           if (!stillPresent) {
             try { await disconnect(); } catch { /* ignore */ }
@@ -129,7 +138,7 @@ export function DevicePanel() {
     setError(null);
     try {
       const info = await connect(selectedPort);
-      setConnected(info);
+      setConnected(info, "serial");
     } catch (e: unknown) {
       setError(String(e));
       setConnecting(false);
@@ -189,14 +198,25 @@ export function DevicePanel() {
 
       {/* Connect / Disconnect button */}
       {!isConnected ? (
-        <button
-          onClick={handleConnect}
-          disabled={!selectedPort || isConnecting}
-          className="flex items-center gap-1.5 px-3 py-1 text-sm bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
-        >
-          {isConnecting ? <Spinner size={13} /> : null}
-          {isConnecting ? "Connecting…" : "Connect"}
-        </button>
+        <>
+          <button
+            onClick={handleConnect}
+            disabled={!selectedPort || isConnecting}
+            className="flex items-center gap-1.5 px-3 py-1 text-sm bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
+          >
+            {isConnecting ? <Spinner size={13} /> : null}
+            {isConnecting ? "Connecting…" : "Connect"}
+          </button>
+          <button
+            onClick={() => setShowBleDialog(true)}
+            disabled={isConnecting}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-surface hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed text-secondary hover:text-primary rounded border border-elevated transition-colors"
+            title="Connect over Bluetooth"
+          >
+            <Bluetooth size={12} />
+            BLE
+          </button>
+        </>
       ) : (
         <button
           onClick={handleDisconnect}
@@ -279,6 +299,8 @@ export function DevicePanel() {
           onCancel={() => setShowRebootConfirm(false)}
         />
       )}
+
+      {showBleDialog && <BleDialog onClose={() => setShowBleDialog(false)} />}
     </div>
   );
 }

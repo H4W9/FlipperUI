@@ -22,8 +22,8 @@ pub fn app_start(client: &mut FlipperClient, name: &str, args: &str) -> Result<(
             args: args.to_string(),
         })),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -37,8 +37,8 @@ pub fn app_exit(client: &mut FlipperClient) -> Result<()> {
         has_next: false,
         content: Some(Content::AppExitRequest(pb_app::AppExitRequest {})),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -55,8 +55,8 @@ pub fn app_load_file(client: &mut FlipperClient, path: &str) -> Result<()> {
             path: path.to_string(),
         })),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -74,8 +74,8 @@ pub fn app_button_press(client: &mut FlipperClient, args: &str) -> Result<()> {
             index: 0,
         })),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -91,8 +91,8 @@ pub fn app_button_release(client: &mut FlipperClient) -> Result<()> {
             pb_app::AppButtonReleaseRequest {},
         )),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }

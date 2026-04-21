@@ -16,6 +16,8 @@ export type ActiveView =
   | "screen"
   | "settings";
 
+export type ConnectionKind = "serial" | "ble";
+
 interface FlipperStore {
   // Navigation
   activeView: ActiveView;
@@ -26,6 +28,8 @@ interface FlipperStore {
   deviceInfo: DeviceInfo | null;
   isConnected: boolean;
   isConnecting: boolean;
+  /** Which transport the current session uses. Null when disconnected. */
+  connectionKind: ConnectionKind | null;
 
   // File browser state
   currentPath: string;
@@ -75,7 +79,7 @@ interface FlipperStore {
   setPorts: (ports: PortInfo[]) => void;
   setSelectedPort: (port: string | null) => void;
   setConnecting: (connecting: boolean) => void;
-  setConnected: (info: DeviceInfo | null) => void;
+  setConnected: (info: DeviceInfo | null, kind?: ConnectionKind | null) => void;
   setCurrentPath: (path: string) => void;
   setEntries: (entries: FileEntry[]) => void;
   setLoading: (loading: boolean) => void;
@@ -115,6 +119,7 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   deviceInfo: null,
   isConnected: false,
   isConnecting: false,
+  connectionKind: null,
   currentPath: "/ext",
   entries: [],
   isLoading: false,
@@ -146,11 +151,12 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setPorts: (ports) => set({ ports }),
   setSelectedPort: (selectedPort) => set({ selectedPort }),
   setConnecting: (isConnecting) => set({ isConnecting }),
-  setConnected: (deviceInfo) =>
+  setConnected: (deviceInfo, kind) =>
     set({
       deviceInfo,
       isConnected: deviceInfo !== null,
       isConnecting: false,
+      connectionKind: deviceInfo === null ? null : kind ?? "serial",
       // Reset file browser + subghz state on disconnect. Snap active view
       // back to Files if the user was on a device-only pane (cli / screen) so
       // they don't see a dead panel.

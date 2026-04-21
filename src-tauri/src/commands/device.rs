@@ -2,12 +2,14 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use std::collections::HashMap;
 
 use crate::error::{FlipperError, Result};
+use crate::flipper::ble::{connection::connect_ble, scanner};
 use crate::flipper::session;
+use crate::flipper::transport::TransportKind;
 use crate::state::{AppState, ConnectionMode};
 
 #[derive(Serialize, Deserialize)]
@@ -71,12 +73,16 @@ pub async fn connect(port: String, state: State<'_, AppState>) -> Result<DeviceI
     let cli_reader_active = Arc::clone(&state.cli_reader_active);
     let screen_stream_active = Arc::clone(&state.screen_stream_active);
     let input_event_tx = Arc::clone(&state.input_event_tx);
+    let ble_cancel_tx = Arc::clone(&state.ble_cancel_tx);
 
     tauri::async_runtime::spawn_blocking(move || {
         // Clean up any previous sessions
         cli_reader_active.store(false, Ordering::Relaxed);
         screen_stream_active.store(false, Ordering::Relaxed);
         *input_event_tx.lock().unwrap() = None;
+        if let Some(tx) = ble_cancel_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
         {
             let mut mode = mode_mutex.lock().unwrap();
             *mode = ConnectionMode::Rpc;
@@ -103,6 +109,68 @@ pub async fn connect(port: String, state: State<'_, AppState>) -> Result<DeviceI
     .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
+/// List discoverable Flipper Zero devices over BLE.
+#[tauri::command]
+pub async fn list_ble_devices() -> Result<Vec<scanner::BleDevice>> {
+    tauri::async_runtime::spawn_blocking(scanner::list_ble_devices_blocking)
+        .await
+        .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+/// Open a BLE connection to the Flipper Zero identified by `id` (from `list_ble_devices`).
+#[tauri::command]
+pub async fn connect_ble_device(
+    id: String,
+    name: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<DeviceInfo> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cli_reader_active = Arc::clone(&state.cli_reader_active);
+    let screen_stream_active = Arc::clone(&state.screen_stream_active);
+    let input_event_tx = Arc::clone(&state.input_event_tx);
+    let ble_cancel_tx = Arc::clone(&state.ble_cancel_tx);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        // Clean up any previous session
+        cli_reader_active.store(false, Ordering::Relaxed);
+        screen_stream_active.store(false, Ordering::Relaxed);
+        *input_event_tx.lock().unwrap() = None;
+        if let Some(tx) = ble_cancel_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+        {
+            let mut mode = mode_mutex.lock().unwrap();
+            *mode = ConnectionMode::Rpc;
+        }
+        {
+            let mut guard = client_mutex.lock().unwrap();
+            *guard = None;
+        }
+
+        let (mut client, cancel_tx) = connect_ble(id, app)?;
+        let info_map = session::get_device_info(&mut client).unwrap_or_default();
+
+        {
+            let mut guard = client_mutex.lock().unwrap();
+            *guard = Some(client);
+        }
+        *ble_cancel_tx.lock().unwrap() = Some(cancel_tx);
+
+        Ok(DeviceInfo {
+            port: name.unwrap_or_else(|| "BLE".into()),
+            hardware_name: info_map.get("hardware_name").cloned(),
+            hardware_version: info_map.get("hardware_ver").cloned(),
+            hardware_uid: info_map.get("hardware_uid").cloned(),
+            firmware_version: info_map.get("software_version").cloned(),
+            firmware_build_date: info_map.get("software_build_date").cloned(),
+        })
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
 /// Close the current connection to the Flipper Zero.
 #[tauri::command]
 pub async fn disconnect(state: State<'_, AppState>) -> Result<()> {
@@ -111,19 +179,36 @@ pub async fn disconnect(state: State<'_, AppState>) -> Result<()> {
     let cli_reader_active = Arc::clone(&state.cli_reader_active);
     let screen_stream_active = Arc::clone(&state.screen_stream_active);
     let input_event_tx = Arc::clone(&state.input_event_tx);
+    let ble_cancel_tx = Arc::clone(&state.ble_cancel_tx);
 
     tauri::async_runtime::spawn_blocking(move || {
         // Stop any running CLI reader or screen stream thread
         cli_reader_active.store(false, Ordering::Relaxed);
         screen_stream_active.store(false, Ordering::Relaxed);
         *input_event_tx.lock().unwrap() = None;
+        // Signal the BLE notification task to exit (if this is a BLE session).
+        if let Some(tx) = ble_cancel_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
         {
             let mut mode = mode_mutex.lock().unwrap();
             *mode = ConnectionMode::Rpc;
         }
         let mut guard = client_mutex.lock().unwrap();
-        *guard = None; // Drop closes the serial port
+        *guard = None; // Drop closes serial port or BLE transport
         Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+/// Return the kind of the active connection ("serial" | "ble"), or `None` if not connected.
+#[tauri::command]
+pub async fn connection_kind(state: State<'_, AppState>) -> Result<Option<TransportKind>> {
+    let client_mutex = Arc::clone(&state.client);
+    tauri::async_runtime::spawn_blocking(move || {
+        let guard = client_mutex.lock().unwrap();
+        Ok(guard.as_ref().map(|c| c.kind()))
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?

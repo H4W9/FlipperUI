@@ -1,19 +1,20 @@
 use prost::Message;
-use serialport::SerialPort;
+
 use crate::error::{FlipperError, Result};
 use crate::flipper::diag;
+use crate::flipper::transport::Transport;
 use crate::pb;
 
-/// Read a protobuf-style varint from the serial port.
+/// Read a protobuf-style varint from the transport.
 ///
 /// Returns a u32 message length. Errors if the decoded value exceeds u32::MAX
 /// (which would mean a >4 GB message — clearly corrupt framing).
-pub fn read_varint(port: &mut dyn SerialPort) -> Result<u32> {
+pub fn read_varint(t: &mut dyn Transport) -> Result<u32> {
     let mut result: u64 = 0;
     let mut shift = 0u32;
     let mut byte = [0u8; 1];
     loop {
-        port.read_exact(&mut byte)?;
+        t.read_exact(&mut byte)?;
         let b = byte[0] as u64;
         result |= (b & 0x7F) << shift;
         if b & 0x80 == 0 {
@@ -52,24 +53,24 @@ fn encode_varint(mut value: u64, buf: &mut [u8; 10]) -> usize {
     i
 }
 
-/// Read one complete `PB.Main` message from the serial port.
-pub fn read_message(port: &mut dyn SerialPort) -> Result<pb::Main> {
-    let len = read_varint(port)?;
+/// Read one complete `PB.Main` message from the transport.
+pub fn read_message(t: &mut dyn Transport) -> Result<pb::Main> {
+    let len = read_varint(t)?;
     let mut buf = vec![0u8; len as usize];
-    port.read_exact(&mut buf)?;
+    t.read_exact(&mut buf)?;
     let msg = pb::Main::decode(buf.as_slice())?;
     diag::log(diag::Direction::Rx, &msg, len as usize);
     Ok(msg)
 }
 
-/// Write one `PB.Main` message to the serial port with a varint length prefix.
-pub fn write_message(port: &mut dyn SerialPort, msg: &pb::Main) -> Result<()> {
+/// Write one `PB.Main` message to the transport with a varint length prefix.
+pub fn write_message(t: &mut dyn Transport, msg: &pb::Main) -> Result<()> {
     let encoded = msg.encode_to_vec();
     let mut varint_buf = [0u8; 10];
     let varint_len = encode_varint(encoded.len() as u64, &mut varint_buf);
-    port.write_all(&varint_buf[..varint_len])?;
-    port.write_all(&encoded)?;
-    port.flush()?;
+    t.write_all(&varint_buf[..varint_len])?;
+    t.write_all(&encoded)?;
+    t.flush()?;
     diag::log(diag::Direction::Tx, msg, encoded.len());
     Ok(())
 }

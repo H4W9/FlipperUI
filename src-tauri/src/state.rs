@@ -1,6 +1,8 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc, Mutex};
 
+use tokio::sync::oneshot;
+
 use crate::flipper::client::FlipperClient;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +40,10 @@ pub struct AppState {
     /// `Arc` so both the Tauri command handler and the reader thread can hold
     /// a reference — the reader clears this slot when it exits.
     pub input_event_tx: InputEventTx,
+    /// Cancel sender for the BLE notification task (only set when the active
+    /// connection is BLE). Sending on it unblocks the task so it can disconnect
+    /// the peripheral cleanly. `None` for serial connections.
+    pub ble_cancel_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 impl Default for AppState {
@@ -59,6 +65,7 @@ impl AppState {
             apps_scan_cancelled: Arc::new(AtomicBool::new(false)),
             nfc_scan_cancelled: Arc::new(AtomicBool::new(false)),
             input_event_tx: Arc::new(Mutex::new(None)),
+            ble_cancel_tx: Arc::new(Mutex::new(None)),
         }
     }
 }

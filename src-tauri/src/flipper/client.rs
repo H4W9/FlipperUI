@@ -1,15 +1,16 @@
 use std::sync::atomic::{AtomicU32, Ordering};
-use serialport::SerialPort;
+
+use crate::flipper::transport::{Transport, TransportKind};
 
 pub struct FlipperClient {
-    pub port: Box<dyn SerialPort>,
+    pub transport: Box<dyn Transport>,
     next_id: AtomicU32,
 }
 
 impl FlipperClient {
-    pub fn new(port: Box<dyn SerialPort>) -> Self {
+    pub fn new(transport: Box<dyn Transport>) -> Self {
         Self {
-            port,
+            transport,
             next_id: AtomicU32::new(1),
         }
     }
@@ -22,5 +23,10 @@ impl FlipperClient {
                 return id;
             }
         }
+    }
+
+    /// Which transport backs this client — Serial or BLE.
+    pub fn kind(&self) -> TransportKind {
+        self.transport.kind()
     }
 }

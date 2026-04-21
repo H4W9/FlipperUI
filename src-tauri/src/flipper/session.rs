@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::flipper::framing::{read_message, write_message};
+use crate::flipper::transport::SerialTransport;
 use crate::flipper::{SERIAL_TIMEOUT_DRAIN, SERIAL_TIMEOUT_NORMAL};
 use crate::pb;
 use crate::pb::main::Content;
@@ -16,30 +17,31 @@ pub fn open_session(port_name: &str) -> Result<FlipperClient> {
         .timeout(SERIAL_TIMEOUT_DRAIN)
         .open()?;
 
-    let mut client = FlipperClient::new(port);
+    let mut transport: Box<dyn crate::flipper::transport::Transport> =
+        Box::new(SerialTransport::new(port));
 
     // Drain any pending CLI text (prompt, log lines, etc.)
     let mut drain_buf = [0u8; 256];
     loop {
-        match client.port.read(&mut drain_buf) {
+        match transport.read(&mut drain_buf) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
     }
 
     // Switch to normal timeout for the session handshake
-    client.port.set_timeout(SERIAL_TIMEOUT_NORMAL)?;
+    transport.set_timeout(SERIAL_TIMEOUT_NORMAL)?;
 
     // Send RPC session start command (CR only — the Flipper CLI expects \r not \r\n)
-    client.port.write_all(SESSION_CMD)?;
-    client.port.flush()?;
+    transport.write_all(SESSION_CMD)?;
+    transport.flush()?;
 
     // Wait for the device to acknowledge with a newline.
-    // The serial port already has SERIAL_TIMEOUT_NORMAL set, so read() will return
+    // The transport already has SERIAL_TIMEOUT_NORMAL set, so read() will return
     // TimedOut if no bytes arrive within 5 seconds — no manual deadline needed.
     let mut byte = [0u8; 1];
     loop {
-        match client.port.read(&mut byte) {
+        match transport.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
             Ok(_) => {} // consume echoed characters, \r, etc.
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
@@ -51,7 +53,7 @@ pub fn open_session(port_name: &str) -> Result<FlipperClient> {
         }
     }
 
-    Ok(client)
+    Ok(FlipperClient::new(transport))
 }
 
 /// Send a ping and verify the device responds correctly.
@@ -65,8 +67,8 @@ pub fn ping(client: &mut FlipperClient) -> Result<()> {
             data: vec![0xDE, 0xAD, 0xBE, 0xEF],
         })),
     };
-    write_message(&mut *client.port, &req)?;
-    let resp = read_message(&mut *client.port)?;
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_message(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -82,11 +84,11 @@ pub fn get_device_info(client: &mut FlipperClient) -> Result<HashMap<String, Str
             pb_system::DeviceInfoRequest {},
         )),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
 
     let mut info = HashMap::new();
     loop {
-        let msg = read_message(&mut *client.port)?;
+        let msg = read_message(&mut *client.transport)?;
         check_response(&msg, id)?;
         if let Some(Content::SystemDeviceInfoResponse(r)) = msg.content {
             info.insert(r.key, r.value);
@@ -110,11 +112,11 @@ pub fn get_power_info(client: &mut FlipperClient) -> Result<HashMap<String, Stri
             pb_system::PowerInfoRequest {},
         )),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
 
     let mut info = HashMap::new();
     loop {
-        let msg = read_message(&mut *client.port)?;
+        let msg = read_message(&mut *client.transport)?;
         check_response(&msg, id)?;
         if let Some(Content::SystemPowerInfoResponse(r)) = msg.content {
             info.insert(r.key, r.value);
@@ -138,7 +140,7 @@ pub fn reboot(client: &mut FlipperClient, mode: i32) -> Result<()> {
             mode,
         })),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
     // Device reboots immediately — no response expected.
     // The serial port will disconnect.
     Ok(())

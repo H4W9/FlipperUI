@@ -29,6 +29,27 @@ export const connect = (port: string): Promise<DeviceInfo> =>
 export const disconnect = (): Promise<void> =>
   invoke<void>("disconnect");
 
+// ── BLE device commands ────────────────────────────────────────────────────
+
+export interface BleDevice {
+  id: string;
+  name: string;
+  rssi: number | null;
+  paired: boolean;
+}
+
+/** Discover Flipper devices over BLE. Runs a ~1.8s scan. */
+export const listBleDevices = (): Promise<BleDevice[]> =>
+  invoke<BleDevice[]>("list_ble_devices");
+
+/** Connect to a Flipper over BLE using an id from {@link listBleDevices}. */
+export const connectBleDevice = (id: string, name?: string): Promise<DeviceInfo> =>
+  invoke<DeviceInfo>("connect_ble_device", { id, name: name ?? null });
+
+/** Which transport backs the active connection — `null` when disconnected. */
+export const connectionKind = (): Promise<"serial" | "ble" | null> =>
+  invoke<"serial" | "ble" | null>("connection_kind");
+
 // ── Storage commands ───────────────────────────────────────────────────────
 
 export const storageList = async (path: string): Promise<FileEntry[]> => {

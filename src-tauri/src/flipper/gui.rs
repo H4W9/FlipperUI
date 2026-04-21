@@ -20,7 +20,7 @@ pub fn start_screen_stream(client: &mut FlipperClient) -> Result<u32> {
             pb_gui::StartScreenStreamRequest {},
         )),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
     Ok(id)
 }
 
@@ -35,9 +35,9 @@ pub fn stop_screen_stream(client: &mut FlipperClient) -> Result<()> {
             pb_gui::StopScreenStreamRequest {},
         )),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
     // Drain any pending frames
-    while let Ok(msg) = read_message(&mut *client.port) {
+    while let Ok(msg) = read_message(&mut *client.transport) {
         if !msg.has_next {
             break;
         }
@@ -60,7 +60,7 @@ where
             break;
         }
 
-        match read_message(&mut *client.port) {
+        match read_message(&mut *client.transport) {
             Ok(msg) => {
                 if let Some(Content::GuiScreenFrame(frame)) = msg.content {
                     on_frame(&frame.data, frame.orientation);
@@ -100,7 +100,7 @@ pub fn send_input_event(client: &mut FlipperClient, key: i32, input_type: i32) -
             },
         )),
     };
-    write_message(&mut *client.port, &req)?;
+    write_message(&mut *client.transport, &req)?;
     Ok(())
 }
 

@@ -5,6 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::error::{FlipperError, Result};
+use crate::flipper::transport::TransportKind;
 use crate::flipper::{cli, client::FlipperClient};
 use crate::state::{AppState, ConnectionMode};
 
@@ -31,10 +32,13 @@ pub fn cli_start(state: State<AppState>, app: AppHandle) -> Result<()> {
         *tx_guard = None;
     }
 
-    // Enter CLI mode on the serial port
+    // Enter CLI mode on the serial port. BLE has no raw text CLI.
     {
         let mut guard = state.client.lock().unwrap();
         let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        if client.kind() == TransportKind::Ble {
+            return Err(FlipperError::BleUnsupported);
+        }
         cli::enter_cli_mode(client)?;
     }
 
@@ -71,8 +75,8 @@ pub fn cli_send(input: String, state: State<AppState>) -> Result<()> {
     let mut guard = state.client.lock().unwrap();
     let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
     let cmd = format!("{}\r", input);
-    client.port.write_all(cmd.as_bytes())?;
-    client.port.flush()?;
+    client.transport.write_all(cmd.as_bytes())?;
+    client.transport.flush()?;
 
     Ok(())
 }
@@ -147,7 +151,7 @@ fn cli_reader_loop(
         let result = {
             let mut guard = client_mutex.lock().unwrap();
             if let Some(ref mut client) = *guard {
-                match client.port.read(&mut buf) {
+                match client.transport.read(&mut buf) {
                     Ok(n) if n > 0 => Some(Ok(n)),
                     Ok(_) => None,
                     Err(e) if e.kind() == std::io::ErrorKind::TimedOut => None,

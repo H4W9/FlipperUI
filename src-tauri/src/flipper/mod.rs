@@ -1,5 +1,6 @@
 pub mod app;
 pub mod apps;
+pub mod ble;
 pub mod cli;
 pub mod client;
 pub mod diag;
@@ -11,6 +12,7 @@ pub mod nfc;
 pub mod session;
 pub mod storage;
 pub mod subghz;
+pub mod transport;
 
 use std::time::Duration;
 

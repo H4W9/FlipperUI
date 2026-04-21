@@ -40,6 +40,8 @@ ______________________________
 [ ] finish subghz one-click replay TX - currently disabled. needs correct RPC sequence (AppStart + LoadFile + ButtonPress or a variant). stock firmware's Sub-GHz app main-menu scene doesn't register an RPC callback, and launching with a file path args preloads the Transmitter scene but ButtonPress didn't trigger TX. try: launching with empty args + LoadFile + ButtonPress("send"); or the "Sub-GHz RPC" variant if firmware exposes it
 
 
+-- EASY --
+[ ] redo README.md with all new features and screenshots
 
 
 ______________________________

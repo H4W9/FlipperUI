@@ -68,8 +68,8 @@ export function SettingsPane() {
             />
             <div className="flex flex-col text-xs">
               <span className="text-primary font-medium">FlipperUI</span>
-              <span className="text-secondary">A qFlipper replacement, focused on file browsing.</span>
-              <span className="text-dim italic mt-0.5">in love —maz</span>
+              <span className="text-secondary">A Flipper Zero Manager and qFlipper replacement, focused on file browsing and organized libraries for SubGHz, Infrared, NFC and everything else.</span>
+              <span className="text-dim italic mt-0.5">in love -maz</span>
             </div>
           </div>
         </Section>

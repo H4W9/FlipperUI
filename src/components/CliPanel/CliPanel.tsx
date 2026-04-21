@@ -2,8 +2,7 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal as TerminalIcon } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { useStorage } from "../../hooks/useStorage";
-import { cliStart, cliSend, cliStop } from "../../lib/tauri";
+import { cliStart, cliSend } from "../../lib/tauri";
 
 // Module-level promise to track CLI cleanup - allows other operations to await
 let cliCleanupPromise: Promise<void> | null = null;
@@ -20,7 +19,6 @@ export function CliPanel() {
     setCliConnected,
     currentPath,
   } = useFlipperStore();
-  const { refresh } = useStorage();
   const [input, setInput] = useState("");
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
@@ -79,18 +77,8 @@ export function CliPanel() {
 
     return () => {
       mounted = false;
-      unlisten?.();
       setCliConnected(false);
-
-      const path = currentPathRef.current;
-      cliCleanupPromise = cliStop()
-        .catch((err) => {
-          console.error("[CLI] cliStop failed:", err);
-        })
-        .finally(() => {
-          cliCleanupPromise = null;
-          refresh(path);
-        });
+      setTimeout(() => unlisten?.(), 0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

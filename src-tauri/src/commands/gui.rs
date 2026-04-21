@@ -42,7 +42,7 @@ pub fn screen_stream_start(state: State<AppState>, app: AppHandle) -> Result<()>
         let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
         gui::start_screen_stream(client)?;
         client
-            .port
+            .transport
             .set_timeout(crate::flipper::SERIAL_TIMEOUT_SCREEN)?;
     }
 
@@ -120,7 +120,7 @@ pub fn screen_stream_stop(state: State<AppState>) -> Result<()> {
         let mut guard = state.client.lock().unwrap();
         if let Some(ref mut client) = *guard {
             let _ = client
-                .port
+                .transport
                 .set_timeout(crate::flipper::SERIAL_TIMEOUT_NORMAL);
             let _ = gui::stop_screen_stream(client);
         }
@@ -192,7 +192,7 @@ fn screen_reader_loop(
             let Some(client) = guard.as_mut() else {
                 break 'outer;
             };
-            match read_message(&mut *client.port) {
+            match read_message(&mut *client.transport) {
                 Ok(msg) => {
                     let data = if let Some(Content::GuiScreenFrame(frame)) = msg.content {
                         Some((frame.data, frame.orientation))

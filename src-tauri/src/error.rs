@@ -32,6 +32,12 @@ pub enum FlipperError {
     #[error("Device is in CLI mode — disconnect terminal first")]
     CliModeActive,
 
+    #[error("BLE pairing required — pair the Flipper in your OS Bluetooth settings and try again ({0})")]
+    BlePairingRequired(String),
+
+    #[error("Operation not supported over BLE — connect via USB")]
+    BleUnsupported,
+
     #[error("Transfer cancelled")]
     TransferCancelled,
 
