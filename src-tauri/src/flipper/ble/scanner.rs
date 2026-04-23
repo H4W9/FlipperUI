@@ -55,8 +55,9 @@ pub async fn list_ble_devices() -> Result<Vec<BleDevice>> {
         .await
         .map_err(map_btle_err)?;
 
-    // Pump events for ~1.8s — this lets btleplug's caches populate.
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(1800);
+    // Pump events for ~10s — this lets btleplug's caches populate and gives
+    // slower-advertising devices a chance to show up.
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(10_000);
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {

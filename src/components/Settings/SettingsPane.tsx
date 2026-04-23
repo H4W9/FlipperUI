@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Wrench, RadioTower, Tv, Nfc, Usb, LayoutGrid, Languages, Info, X, Plus } from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
+import { useDirectorySuggestions } from "../../lib/useDirectorySuggestions";
 
 const LANGUAGE_OPTIONS = [{ code: "en", label: "English" }];
 
@@ -224,6 +225,10 @@ function ExcludedDirsEditor({
 }) {
   const [draft, setDraft] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const datalistId = useId();
+  const suggestions = useDirectorySuggestions(draft, rootPath, {
+    exclude: value,
+  });
 
   const prefix = `${rootPath}/`;
   const samplePath = `${rootPath}/private`;
@@ -279,8 +284,15 @@ function ExcludedDirsEditor({
           }}
           disabled={disabled}
           placeholder={samplePath}
+          list={datalistId}
+          autoComplete="off"
           className="flex-1 bg-surface border border-border-subtle rounded px-2 py-1 text-xs text-primary placeholder:text-dim focus:outline-none focus:border-accent disabled:opacity-50"
         />
+        <datalist id={datalistId}>
+          {suggestions.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <button
           onClick={add}
           disabled={disabled || !draft.trim()}
@@ -344,6 +356,10 @@ function AbsoluteDirListEditor({
 }) {
   const [draft, setDraft] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const datalistId = useId();
+  const suggestions = useDirectorySuggestions(draft, "/ext", {
+    exclude: [...value, ...(reserved ?? [])],
+  });
 
   const add = () => {
     const trimmed = draft.trim().replace(/\/+$/, "");
@@ -399,8 +415,15 @@ function AbsoluteDirListEditor({
           }}
           disabled={disabled}
           placeholder={placeholder}
+          list={datalistId}
+          autoComplete="off"
           className="flex-1 bg-surface border border-border-subtle rounded px-2 py-1 text-xs text-primary placeholder:text-dim focus:outline-none focus:border-accent disabled:opacity-50"
         />
+        <datalist id={datalistId}>
+          {suggestions.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <button
           onClick={add}
           disabled={disabled || !draft.trim()}

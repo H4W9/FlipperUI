@@ -6,6 +6,7 @@ pub mod device;
 pub mod diag;
 pub mod gui;
 pub mod infrared;
+pub mod library_scan;
 pub mod nfc;
 pub mod storage;
 pub mod subghz;

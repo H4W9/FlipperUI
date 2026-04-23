@@ -1,5 +1,6 @@
 import { RefreshCw, Search, X, RadioTower } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
+import { ScanProgressBar } from "../ui/ScanProgressBar";
 
 interface Props {
   protocols: string[];
@@ -110,29 +111,7 @@ export function LibraryToolbar({
         </select>
       </div>
 
-      {scanning && progress && (
-        <div className="px-3 pb-2 flex flex-col gap-1">
-          <div className="h-[3px] w-full bg-surface rounded overflow-hidden">
-            <div
-              className="h-full bg-accent transition-[width] duration-100"
-              style={{
-                width:
-                  progress.total > 0
-                    ? `${(progress.scanned / progress.total) * 100}%`
-                    : "0%",
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-dim">
-            <span className="truncate max-w-[60%]" title={progress.current_path}>
-              {progress.current_path || "Scanning…"}
-            </span>
-            <span>
-              {progress.scanned} / {progress.total || "?"}
-            </span>
-          </div>
-        </div>
-      )}
+      {scanning && progress && <ScanProgressBar progress={progress} />}
     </header>
   );
 }

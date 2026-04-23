@@ -1,34 +1,12 @@
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
+use crate::commands::library_scan::run_library_scan;
 use crate::error::{FlipperError, Result};
 use crate::flipper::nfc::{self, NfcEntry};
-use crate::state::{AppState, ConnectionMode};
-
-fn validate_root(path: &str) -> Result<()> {
-    if path.contains("..") {
-        return Err(FlipperError::Session(
-            "Path traversal (..) is not allowed".into(),
-        ));
-    }
-    if !path.starts_with("/ext") && !path.starts_with("/int") && !path.starts_with("/any") {
-        return Err(FlipperError::Session(
-            "Path must start with /ext, /int, or /any".into(),
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Serialize, Clone)]
-struct ScanProgress<'a> {
-    scanned: u32,
-    total: u32,
-    current_path: &'a str,
-}
+use crate::state::AppState;
 
 /// Recursively scan a directory for `.nfc` files and parse their headers.
 /// Emits `nfc-scan-progress` events as it works.
@@ -46,40 +24,25 @@ pub async fn nfc_scan(
     cancelled.store(false, Ordering::Relaxed);
 
     tauri::async_runtime::spawn_blocking(move || {
-        validate_root(&root)?;
-        {
-            let mode = mode_mutex.lock().unwrap();
-            if *mode == ConnectionMode::Cli {
-                return Err(FlipperError::CliModeActive);
-            }
-        }
-        let mut guard = client_mutex.lock().unwrap();
-        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-
-        let cached_map: HashMap<String, NfcEntry> = cached
-            .unwrap_or_default()
-            .into_iter()
-            .map(|e| (e.path.clone(), e))
-            .collect();
-
-        let mut on_progress = |scanned: u32, total: u32, current: &str| {
-            let _ = app.emit(
-                "nfc-scan-progress",
-                ScanProgress {
-                    scanned,
-                    total,
-                    current_path: current,
-                },
-            );
-        };
-
-        nfc::scan_library(
-            client,
-            &root,
-            &excluded_dirs,
-            &cached_map,
-            &cancelled,
-            &mut on_progress,
+        run_library_scan(
+            client_mutex,
+            mode_mutex,
+            cancelled,
+            app,
+            &[&root],
+            "nfc-scan-progress",
+            cached,
+            |e| e.path.clone(),
+            |client, cached_map, cancelled, on_progress| {
+                nfc::scan_library(
+                    client,
+                    &root,
+                    &excluded_dirs,
+                    cached_map,
+                    cancelled,
+                    on_progress,
+                )
+            },
         )
     })
     .await

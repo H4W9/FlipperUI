@@ -32,16 +32,9 @@ ______________________________
 [ ] brainstorm UI redesign - simplify where possible without losing usability. evaluate: nav rail density, progress feedback patterns, library row actions, global-search placement, overall information density
 
 --- FIXES / IMPROVEMENTS ---
-[ ] change BLE scan duration to 10s
-[ ] Settings -> exclude directories -> add auto-completion
-[ ] visually indicate loading-process in the time from pressing the scan button in libraries ultil the progress bar starts
 [ ] fix screen sharing over BLE - currently broken / no frames; investigate whether screen-stream reader path works over the BLE transport at all or needs a BLE-specific pump
-[ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)
-[ ] clear library entries synchronously on deviceUid change - prevents a flash of the prior device's entries before the async cache load completes (subghz/ir/nfc/badusb)
-[ ] extract shared library-scan backend helper - dedupe the validate_root + mode check + client lock + cached_map + progress-emit boilerplate repeated across subghz/ir/nfc/badusb commands; makes adding RFID + future libraries near-trivial
 
 --- ASSETS ---
-[ ] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
 
 --- NEW FEATURES ---
 [ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
@@ -90,13 +83,10 @@ ______________________________
 [x] subghz library view - recursive scan of /ext/subghz, parse Filetype/Frequency/Preset/Protocol/Bit/Key/TE/RAW_Data, virtualized table with freq/protocol/preset/modulation columns + search + protocol filter
 [x] subghz library settings - exclude paths from scan (configured in Settings, honored by the scan)
 [x] google maps button on .sub rows with parsed coordinates (Latitude/Longitude or freeform Note: lat,lon)
-
 [x] app library view - recursive /ext/apps scan for .fap files (+ user-configurable extra roots), virtualized table with category/size columns, search + category filter, cached per device UID with mtime-aware re-scan
 [x] app library actions - launch on device (AppStartRequest), download .fap to disk, rename, delete, multi-file install via drag-drop or upload dialog
-
 [x] nfc library view - recursive /ext/nfc scan for .nfc files, parse Filetype/Device type/UID/ATQA/SAK/Mifare type, virtualized table with type/uid/size columns, search + type filter, cached per device UID with mtime-aware re-scan, excluded-dirs setting
 [x] nfc library actions - download, rename, duplicate, delete, multi-file upload via drag-drop or upload dialog; greyed-out emulate button (TX flow to wire later)
-
 [x] add drag and drop functionality for uploads and downloads
 [x] add file-size formatting into readable formats (MB, KB)
 [x] add a cli connected to flipper to the bottom of the app
@@ -128,3 +118,10 @@ ______________________________
 [x] file drag-out - drag files FROM file browser to Finder via @crabnebula/tauri-plugin-drag
 [x] grey out + disable side-rail nav items while no flipper is connected; also disable CLI while connected over BLE (Settings stays clickable)
 [x] collapsible side-rail - hamburger toggle at the top switches between icon-only (w-14) and icon+label (w-48) modes
+[x] USB/BLE toggle switch (iOS-style) - picks transport in DevicePanel; shows port-select + USB Connect when USB, BLE Connect when BLE; USB auto-connect suppressed while BLE is selected
+[x] BLE scan duration bumped 1.8s → 10s in flipper/ble/scanner.rs
+[x] Settings excluded-dirs autocompletion - <datalist> fed by storageList() via useDirectorySuggestions hook, per-parent cached; wired into ExcludedDirsEditor (SubGhz/IR/NFC) + AbsoluteDirListEditor (BadUSB/Apps extra+excluded)
+[x] library scan loading UX - indeterminate sliding bar + "Preparing scan…" label while total=0; flips to determinate on first progress event; shared ScanProgressBar component used by all 5 library toolbars
+[x] shared library-scan backend helper - commands/library_scan.rs::run_library_scan<E,F> owns validate_root + mode check + client lock + cached_map + progress-emit; subghz/infrared/nfc/badusb commands collapsed to ~25 lines each
+[x] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
+[ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)

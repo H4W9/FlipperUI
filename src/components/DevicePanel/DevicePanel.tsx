@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Usb, RefreshCw, Power, Battery, HardDrive, Bluetooth } from "lucide-react";
+import { Usb, RefreshCw, Power, Battery, HardDrive } from "lucide-react";
 import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
@@ -37,6 +37,7 @@ export function DevicePanel() {
   const [userDisconnected, setUserDisconnected] = useState(false);
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
   const [showBleDialog, setShowBleDialog] = useState(false);
+  const [transport, setTransport] = useState<"usb" | "ble">("usb");
 
   // Poll for port changes every 2 seconds + auto-connect
   useEffect(() => {
@@ -60,8 +61,8 @@ export function DevicePanel() {
         }
 
         // Auto-connect: Flipper detected, not connected, not connecting,
-        // and user hasn't manually disconnected
-        if (flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
+        // user hasn't manually disconnected, and USB transport is selected
+        if (transport === "usb" && flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
           const port = state.selectedPort ?? flipper.name;
           setSelectedPort(port);
           setConnecting(true);
@@ -97,7 +98,7 @@ export function DevicePanel() {
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected]);
+  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected, transport]);
 
   // Fetch power + storage info after connection
   useEffect(() => {
@@ -181,24 +182,57 @@ export function DevicePanel() {
 
       <div className="w-px h-4 bg-elevated mx-1" />
 
-      {/* Port selector */}
-      <select
-        value={selectedPort ?? ""}
-        onChange={(e) => setSelectedPort(e.target.value || null)}
-        disabled={isConnected || isConnecting}
-        className="bg-surface text-primary text-sm border border-elevated rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-accent"
-      >
-        <option value="">Select port…</option>
-        {ports.map((p) => (
-          <option key={p.name} value={p.name}>
-            {p.name}
-          </option>
-        ))}
-      </select>
+      {/* Transport toggle (USB / BLE) */}
+      <div className="flex items-center gap-2 select-none">
+        <span
+          className={`text-xs font-medium ${transport === "usb" ? "text-primary" : "text-muted"}`}
+        >
+          USB
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={transport === "ble"}
+          aria-label="Toggle connection transport"
+          onClick={() => setTransport(transport === "usb" ? "ble" : "usb")}
+          disabled={isConnected || isConnecting}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            transport === "ble" ? "bg-accent" : "bg-elevated"
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
+              transport === "ble" ? "translate-x-[18px]" : "translate-x-[2px]"
+            }`}
+          />
+        </button>
+        <span
+          className={`text-xs font-medium ${transport === "ble" ? "text-primary" : "text-muted"}`}
+        >
+          BLE
+        </span>
+      </div>
+
+      {/* Port selector (USB only) */}
+      {transport === "usb" && (
+        <select
+          value={selectedPort ?? ""}
+          onChange={(e) => setSelectedPort(e.target.value || null)}
+          disabled={isConnected || isConnecting}
+          className="bg-surface text-primary text-sm border border-elevated rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-accent"
+        >
+          <option value="">Select port…</option>
+          {ports.map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       {/* Connect / Disconnect button */}
       {!isConnected ? (
-        <>
+        transport === "usb" ? (
           <button
             onClick={handleConnect}
             disabled={!selectedPort || isConnecting}
@@ -207,16 +241,16 @@ export function DevicePanel() {
             {isConnecting ? <Spinner size={13} /> : null}
             {isConnecting ? "Connecting…" : "Connect"}
           </button>
+        ) : (
           <button
             onClick={() => setShowBleDialog(true)}
             disabled={isConnecting}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-surface hover:bg-elevated disabled:opacity-40 disabled:cursor-not-allowed text-secondary hover:text-primary rounded border border-elevated transition-colors"
-            title="Connect over Bluetooth"
+            className="flex items-center gap-1.5 px-3 py-1 text-sm bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
-            <Bluetooth size={12} />
-            BLE
+            {isConnecting ? <Spinner size={13} /> : null}
+            {isConnecting ? "Connecting…" : "Connect"}
           </button>
-        </>
+        )
       ) : (
         <button
           onClick={handleDisconnect}
