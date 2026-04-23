@@ -12,6 +12,7 @@ interface Props {
   total: number;
   filtered: number;
   lastScannedAt: number | null;
+  isConnected: boolean;
 }
 
 export function LibraryToolbar({
@@ -25,15 +26,19 @@ export function LibraryToolbar({
   total,
   filtered,
   lastScannedAt,
+  isConnected,
 }: Props) {
   const scanning = useFlipperStore((s) => s.irScanning);
   const progress = useFlipperStore((s) => s.irProgress);
 
-  const refreshTitle = scanning
-    ? "Scanning…"
-    : lastScannedAt
-      ? `Re-scan /ext/infrared (last scan ${formatRelative(lastScannedAt)})`
-      : "Scan /ext/infrared";
+  const refreshDisabled = scanning || !isConnected;
+  const refreshTitle = !isConnected
+    ? "Connect a Flipper to scan"
+    : scanning
+      ? "Scanning…"
+      : lastScannedAt
+        ? `Re-scan /ext/infrared (last scan ${formatRelative(lastScannedAt)})`
+        : "Scan /ext/infrared";
 
   return (
     <header className="shrink-0 border-b border-border-subtle bg-panel">
@@ -64,7 +69,7 @@ export function LibraryToolbar({
         ) : (
           <button
             onClick={onRefresh}
-            disabled={scanning}
+            disabled={refreshDisabled}
             title={refreshTitle}
             className="flex items-center gap-1 px-2 py-1 text-[11px] text-secondary hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed"
           >

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { Wrench, RadioTower, Tv, Nfc, LayoutGrid, Languages, Info, X, Plus } from "lucide-react";
+import { Wrench, RadioTower, Tv, Nfc, Usb, LayoutGrid, Languages, Info, X, Plus } from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
 
@@ -34,6 +34,11 @@ export function SettingsPane() {
 
   const onNfcExcludedChange = async (excludedDirs: string[]) => {
     const next = await updateSettings({ nfc: { excludedDirs } });
+    setSettings(next);
+  };
+
+  const onBadUsbExcludedChange = async (excludedDirs: string[]) => {
+    const next = await updateSettings({ badusb: { excludedDirs } });
     setSettings(next);
   };
 
@@ -115,6 +120,17 @@ export function SettingsPane() {
             value={settings?.nfc.excludedDirs ?? []}
             disabled={!settings}
             onChange={onNfcExcludedChange}
+          />
+        </Section>
+
+        <Section icon={<Usb size={13} />} title="BadUSB">
+          <AbsoluteDirListEditor
+            heading="Excluded directories"
+            description="Paths skipped during the BadUSB / BadKB library scan. Must live under /ext/badusb or /ext/badkb."
+            placeholder="/ext/badusb/private"
+            disabled={!settings}
+            value={settings?.badusb.excludedDirs ?? []}
+            onChange={onBadUsbExcludedChange}
           />
         </Section>
 

@@ -3,6 +3,7 @@ import type { DeviceInfo, FileEntry, PortInfo } from "../types/flipper";
 import type { ScanProgress, SubGhzEntry } from "../types/subghz";
 import type { IrEntry, IrScanProgress } from "../types/infrared";
 import type { NfcEntry, NfcScanProgress } from "../types/nfc";
+import type { BadUsbEntry, BadUsbScanProgress } from "../types/badusb";
 import type { AppEntry, AppIconEntry, AppScanProgress } from "../types/apps";
 
 export type ActiveView =
@@ -10,6 +11,7 @@ export type ActiveView =
   | "subghz"
   | "infrared"
   | "nfc"
+  | "badusb"
   | "apps"
   | "info"
   | "cli"
@@ -64,6 +66,12 @@ interface FlipperStore {
   nfcProgress: NfcScanProgress | null;
   nfcError: string | null;
 
+  // BadUSB library
+  badusbEntries: BadUsbEntry[];
+  badusbScanning: boolean;
+  badusbProgress: BadUsbScanProgress | null;
+  badusbError: string | null;
+
   // App library
   appEntries: AppEntry[];
   appsScanning: boolean;
@@ -101,6 +109,10 @@ interface FlipperStore {
   setNfcScanning: (scanning: boolean) => void;
   setNfcProgress: (progress: NfcScanProgress | null) => void;
   setNfcError: (error: string | null) => void;
+  setBadUsbEntries: (entries: BadUsbEntry[]) => void;
+  setBadUsbScanning: (scanning: boolean) => void;
+  setBadUsbProgress: (progress: BadUsbScanProgress | null) => void;
+  setBadUsbError: (error: string | null) => void;
   setAppEntries: (entries: AppEntry[]) => void;
   setAppsScanning: (scanning: boolean) => void;
   setAppsProgress: (progress: AppScanProgress | null) => void;
@@ -140,6 +152,10 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   nfcScanning: false,
   nfcProgress: null,
   nfcError: null,
+  badusbEntries: [],
+  badusbScanning: false,
+  badusbProgress: null,
+  badusbError: null,
   appEntries: [],
   appsScanning: false,
   appsProgress: null,
@@ -157,9 +173,11 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
       isConnected: deviceInfo !== null,
       isConnecting: false,
       connectionKind: deviceInfo === null ? null : kind ?? "serial",
-      // Reset file browser + subghz state on disconnect. Snap active view
-      // back to Files if the user was on a device-only pane (cli / screen) so
-      // they don't see a dead panel.
+      // Reset file browser + in-flight scan/transmit state on disconnect.
+      // Library *entries* (subghz / ir / nfc / apps) deliberately survive so
+      // cached libraries stay browsable offline — they get rehydrated from
+      // disk cache the next time a device connects (see each library view's
+      // deviceUid effect).
       ...(deviceInfo === null
         ? {
             currentPath: "/ext",
@@ -167,25 +185,23 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
             error: null,
             cliConnected: false,
             cliHistory: [],
-            subghzEntries: [],
             subghzScanning: false,
             subghzProgress: null,
             subghzError: null,
             subghzTransmittingPath: null,
-            irEntries: [],
             irScanning: false,
             irProgress: null,
             irError: null,
-            nfcEntries: [],
             nfcScanning: false,
             nfcProgress: null,
             nfcError: null,
-            appEntries: [],
+            badusbScanning: false,
+            badusbProgress: null,
+            badusbError: null,
             appsScanning: false,
             appsProgress: null,
             appsError: null,
             appsLaunchingPath: null,
-            appIcons: {},
           }
         : {}),
     }),
@@ -217,6 +233,10 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setNfcScanning: (nfcScanning) => set({ nfcScanning }),
   setNfcProgress: (nfcProgress) => set({ nfcProgress }),
   setNfcError: (nfcError) => set({ nfcError }),
+  setBadUsbEntries: (badusbEntries) => set({ badusbEntries }),
+  setBadUsbScanning: (badusbScanning) => set({ badusbScanning }),
+  setBadUsbProgress: (badusbProgress) => set({ badusbProgress }),
+  setBadUsbError: (badusbError) => set({ badusbError }),
   setAppEntries: (appEntries) => set({ appEntries }),
   setAppsScanning: (appsScanning) => set({ appsScanning }),
   setAppsProgress: (appsProgress) => set({ appsProgress }),

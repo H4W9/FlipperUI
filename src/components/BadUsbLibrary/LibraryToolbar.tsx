@@ -1,25 +1,24 @@
-import { RefreshCw, Search, X, RadioTower } from "lucide-react";
+import { RefreshCw, Search, X, Usb } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 
 interface Props {
-  protocols: string[];
-  protocolFilter: string | null;
-  onProtocolFilterChange: (p: string | null) => void;
+  kinds: string[];
+  kindFilter: string | null;
+  onKindFilterChange: (k: string | null) => void;
   query: string;
   onQueryChange: (q: string) => void;
   onRefresh: () => void;
   onCancel: () => void;
   total: number;
   filtered: number;
-  /** ms timestamp of the last successful scan (from on-disk cache), or null. */
   lastScannedAt: number | null;
   isConnected: boolean;
 }
 
 export function LibraryToolbar({
-  protocols,
-  protocolFilter,
-  onProtocolFilterChange,
+  kinds,
+  kindFilter,
+  onKindFilterChange,
   query,
   onQueryChange,
   onRefresh,
@@ -29,32 +28,29 @@ export function LibraryToolbar({
   lastScannedAt,
   isConnected,
 }: Props) {
-  const scanning = useFlipperStore((s) => s.subghzScanning);
-  const progress = useFlipperStore((s) => s.subghzProgress);
-  const transmitting = useFlipperStore((s) => s.subghzTransmittingPath);
+  const scanning = useFlipperStore((s) => s.badusbScanning);
+  const progress = useFlipperStore((s) => s.badusbProgress);
 
-  const refreshDisabled = scanning || transmitting !== null || !isConnected;
+  const refreshDisabled = scanning || !isConnected;
   const refreshTitle = !isConnected
     ? "Connect a Flipper to scan"
-    : transmitting
-      ? "Cannot scan while transmitting"
-      : scanning
-        ? "Scanning…"
-        : lastScannedAt
-          ? `Re-scan /ext/subghz (last scan ${formatRelative(lastScannedAt)})`
-          : "Scan /ext/subghz";
+    : scanning
+      ? "Scanning…"
+      : lastScannedAt
+        ? `Re-scan /ext/badusb + /ext/badkb (last scan ${formatRelative(lastScannedAt)})`
+        : "Scan /ext/badusb + /ext/badkb";
 
   return (
     <header className="shrink-0 border-b border-border-subtle bg-panel">
       <div className="flex items-center gap-2 px-3 py-2">
-        <RadioTower size={14} className="text-accent" />
-        <h2 className="text-xs font-medium text-primary">Sub-GHz Library</h2>
-        <span className="text-[11px] text-dim">/ext/subghz</span>
+        <Usb size={14} className="text-accent" />
+        <h2 className="text-xs font-medium text-primary">BadUSB Library</h2>
+        <span className="text-[11px] text-dim">/ext/badusb · /ext/badkb</span>
         <div className="flex-1" />
         <span className="text-[11px] text-muted">
           {filtered === total
-            ? `${total} entries`
-            : `${filtered} / ${total} entries`}
+            ? `${total} scripts`
+            : `${filtered} / ${total} scripts`}
           {lastScannedAt && !scanning && (
             <span className="text-dim ml-1.5" title={new Date(lastScannedAt).toLocaleString()}>
               · cached {formatRelative(lastScannedAt)}
@@ -92,19 +88,19 @@ export function LibraryToolbar({
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search name, key, protocol…"
+            placeholder="Search script, comment, path…"
             className="w-full bg-surface border border-border-subtle rounded pl-7 pr-2 py-1 text-xs text-primary placeholder:text-dim focus:outline-none focus:border-accent"
           />
         </div>
         <select
-          value={protocolFilter ?? ""}
-          onChange={(e) => onProtocolFilterChange(e.target.value || null)}
+          value={kindFilter ?? ""}
+          onChange={(e) => onKindFilterChange(e.target.value || null)}
           className="bg-surface border border-border-subtle rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-accent"
         >
-          <option value="">All protocols</option>
-          {protocols.map((p) => (
-            <option key={p} value={p}>
-              {p}
+          <option value="">All kinds</option>
+          {kinds.map((k) => (
+            <option key={k} value={k}>
+              {kindLabel(k)}
             </option>
           ))}
         </select>
@@ -135,6 +131,12 @@ export function LibraryToolbar({
       )}
     </header>
   );
+}
+
+function kindLabel(kind: string): string {
+  if (kind === "usb") return "BadUSB";
+  if (kind === "kb") return "BadKB";
+  return kind;
 }
 
 function formatRelative(ts: number): string {

@@ -1,5 +1,6 @@
 pub mod app;
 pub mod apps;
+pub mod badusb;
 pub mod ble;
 pub mod cli;
 pub mod client;

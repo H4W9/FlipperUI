@@ -1,40 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Tv, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Usb } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { infraredCancelScan, infraredScan } from "../../lib/tauri";
+import { badusbCancelScan, badusbScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
-import { loadInfraredCache, saveInfraredCache } from "../../lib/infraredCache";
+import { loadBadUsbCache, saveBadUsbCache } from "../../lib/badusbCache";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
-import type { IrScanProgress } from "../../types/infrared";
+import { FilePreviewModal } from "./FilePreviewModal";
+import type { BadUsbEntry, BadUsbScanProgress } from "../../types/badusb";
 
-const IR_ROOT = "/ext/infrared";
+const USB_ROOT = "/ext/badusb";
+const KB_ROOT = "/ext/badkb";
 
-export function InfraredLibrary() {
+export function BadUsbLibrary() {
   const isConnected = useFlipperStore((s) => s.isConnected);
   const deviceUid = useFlipperStore((s) => s.deviceInfo?.hardware_uid ?? null);
-  const entries = useFlipperStore((s) => s.irEntries);
-  const scanning = useFlipperStore((s) => s.irScanning);
-  const error = useFlipperStore((s) => s.irError);
-  const setEntries = useFlipperStore((s) => s.setIrEntries);
-  const setScanning = useFlipperStore((s) => s.setIrScanning);
-  const setProgress = useFlipperStore((s) => s.setIrProgress);
-  const setError = useFlipperStore((s) => s.setIrError);
+  const entries = useFlipperStore((s) => s.badusbEntries);
+  const scanning = useFlipperStore((s) => s.badusbScanning);
+  const error = useFlipperStore((s) => s.badusbError);
+  const setEntries = useFlipperStore((s) => s.setBadUsbEntries);
+  const setScanning = useFlipperStore((s) => s.setBadUsbScanning);
+  const setProgress = useFlipperStore((s) => s.setBadUsbProgress);
+  const setError = useFlipperStore((s) => s.setBadUsbError);
 
   const [excludedDirs, setExcludedDirs] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+  const [previewEntry, setPreviewEntry] = useState<BadUsbEntry | null>(null);
 
   useEffect(() => {
-    loadSettings().then((s) => setExcludedDirs(s.infrared.excludedDirs));
-    return subscribeSettings((s) => setExcludedDirs(s.infrared.excludedDirs));
+    loadSettings().then((s) => setExcludedDirs(s.badusb.excludedDirs));
+    return subscribeSettings((s) => setExcludedDirs(s.badusb.excludedDirs));
   }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<IrScanProgress>("infrared-scan-progress", (e) =>
+    listen<BadUsbScanProgress>("badusb-scan-progress", (e) =>
       setProgress(e.payload),
     ).then((u) => {
       unlisten = u;
@@ -42,13 +45,13 @@ export function InfraredLibrary() {
     return () => unlisten?.();
   }, [setProgress]);
 
-  // Rehydrate from disk on every deviceUid change; clears stale entries from
-  // a previous device and makes the library available as soon as a device is
-  // known. Disk is the source of truth — scans always save before returning.
+  // Rehydrate from disk on every deviceUid change — swaps in this device's
+  // cache (or clears it) so entries from a prior device don't linger after
+  // reconnect to a different one.
   useEffect(() => {
     if (!deviceUid) return;
     let cancelled = false;
-    loadInfraredCache(deviceUid).then((cache) => {
+    loadBadUsbCache(deviceUid).then((cache) => {
       if (cancelled) return;
       setCacheScannedAt(cache?.scannedAt ?? null);
       setEntries(cache?.entries ?? []);
@@ -64,10 +67,10 @@ export function InfraredLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
-      const list = await infraredScan(IR_ROOT, excludedDirs, entries);
+      const list = await badusbScan(USB_ROOT, KB_ROOT, excludedDirs, entries);
       setEntries(list);
       if (deviceUid) {
-        await saveInfraredCache(deviceUid, list).catch(() => {});
+        await saveBadUsbCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
     } catch (e) {
@@ -83,49 +86,38 @@ export function InfraredLibrary() {
 
   const cancelScan = async () => {
     try {
-      await infraredCancelScan();
+      await badusbCancelScan();
     } catch {
       /* fine — flag may have already been cleared */
     }
   };
 
-  const protocols = useMemo(() => {
+  const kinds = useMemo(() => {
     const set = new Set<string>();
-    for (const e of entries) {
-      for (const s of e.signals) {
-        if (s.protocol) set.add(s.protocol);
-      }
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    for (const e of entries) set.add(e.kind);
+    return Array.from(set).sort();
   }, [entries]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter((e) => {
-      if (protocolFilter) {
-        if (!e.signals.some((s) => s.protocol === protocolFilter)) return false;
-      }
+      if (kindFilter && e.kind !== kindFilter) return false;
       if (!q) return true;
-      const haystack = [
-        e.name,
-        e.path,
-        ...e.signals.flatMap((s) => [s.name, s.protocol, s.address, s.command]),
-      ]
-        .filter(Boolean)
+      const haystack = [e.name, e.path, e.comment ?? "", e.kind]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [entries, query, protocolFilter]);
+  }, [entries, query, kindFilter]);
 
-  // Browsable while disconnected — scanning degrades in the toolbar.
+  // Browsable while disconnected — scan/preview degrade below.
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
       <LibraryToolbar
-        protocols={protocols}
-        protocolFilter={protocolFilter}
-        onProtocolFilterChange={setProtocolFilter}
+        kinds={kinds}
+        kindFilter={kindFilter}
+        onKindFilterChange={setKindFilter}
         query={query}
         onQueryChange={setQuery}
         onRefresh={runScan}
@@ -150,7 +142,23 @@ export function InfraredLibrary() {
       {entries.length === 0 && !scanning ? (
         <EmptyState onScan={runScan} />
       ) : (
-        <LibraryTable entries={filtered} />
+        <LibraryTable
+          entries={filtered}
+          onPreview={(entry) => {
+            if (!isConnected) {
+              setError("Connect a Flipper to preview script contents.");
+              return;
+            }
+            setPreviewEntry(entry);
+          }}
+        />
+      )}
+
+      {previewEntry && (
+        <FilePreviewModal
+          entry={previewEntry}
+          onClose={() => setPreviewEntry(null)}
+        />
       )}
     </div>
   );
@@ -159,13 +167,13 @@ export function InfraredLibrary() {
 function EmptyState({ onScan }: { onScan: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-dim">
-      <Tv size={40} strokeWidth={1.5} className="text-elevated" />
-      <p className="text-sm">No .ir files indexed yet.</p>
+      <Usb size={40} strokeWidth={1.5} className="text-elevated" />
+      <p className="text-sm">No BadUSB / BadKB scripts indexed yet.</p>
       <button
         onClick={onScan}
         className="px-3 py-1.5 text-xs text-primary bg-accent/20 border border-accent/40 rounded hover:bg-accent/30"
       >
-        Scan /ext/infrared
+        Scan /ext/badusb + /ext/badkb
       </button>
     </div>
   );

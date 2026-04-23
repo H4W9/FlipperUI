@@ -14,6 +14,7 @@ interface Props {
   total: number;
   filtered: number;
   lastScannedAt: number | null;
+  isConnected: boolean;
 }
 
 export function LibraryToolbar({
@@ -29,16 +30,23 @@ export function LibraryToolbar({
   total,
   filtered,
   lastScannedAt,
+  isConnected,
 }: Props) {
   const scanning = useFlipperStore((s) => s.nfcScanning);
   const progress = useFlipperStore((s) => s.nfcProgress);
 
-  const refreshTitle = scanning
-    ? "Scanning…"
-    : lastScannedAt
-      ? `Re-scan /ext/nfc (last scan ${formatRelative(lastScannedAt)})`
-      : "Scan /ext/nfc";
+  const refreshTitle = !isConnected
+    ? "Connect a Flipper to scan"
+    : scanning
+      ? "Scanning…"
+      : lastScannedAt
+        ? `Re-scan /ext/nfc (last scan ${formatRelative(lastScannedAt)})`
+        : "Scan /ext/nfc";
   const uploading = uploadingCount > 0;
+  const uploadDisabled = scanning || uploading || !isConnected;
+  const uploadTitle = !isConnected
+    ? "Connect a Flipper to upload .nfc files"
+    : "Upload .nfc files";
 
   return (
     <header className="shrink-0 border-b border-border-subtle bg-panel">
@@ -60,8 +68,8 @@ export function LibraryToolbar({
         </span>
         <button
           onClick={onUpload}
-          disabled={scanning || uploading}
-          title="Upload .nfc files"
+          disabled={uploadDisabled}
+          title={uploadTitle}
           className="flex items-center gap-1 px-2 py-1 text-[11px] text-secondary hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Upload size={11} />
@@ -79,7 +87,7 @@ export function LibraryToolbar({
         ) : (
           <button
             onClick={onRefresh}
-            disabled={scanning || uploading}
+            disabled={scanning || uploading || !isConnected}
             title={refreshTitle}
             className="flex items-center gap-1 px-2 py-1 text-[11px] text-secondary hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed"
           >

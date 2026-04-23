@@ -239,6 +239,19 @@ pub struct StorageInfo {
 }
 
 #[tauri::command]
+pub async fn storage_du(path: String, state: State<'_, AppState>) -> Result<u64> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_path(&path)?;
+        with_client(&mode_mutex, &client_mutex, |c| storage::storage_du(c, &path))
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+#[tauri::command]
 pub async fn storage_info(path: String, state: State<'_, AppState>) -> Result<StorageInfo> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);

@@ -11,30 +11,34 @@ import {
   Search,
   Terminal,
 } from "lucide-react";
-import { deviceInfoAll, powerInfo, storageInfo } from "../../lib/tauri";
+import { deviceInfoAll, powerInfo, storageDu, storageInfo } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
 import type { StorageInfo as StorageInfoType } from "../../types/flipper";
 
-// Shipped assets. Black + transparent variants aren't hosted on Flipper's CDN
-// under predictable names — tracked in todo.txt to be added later. Until then
-// every color_code falls back to the white/orange render.
-import whiteFlipper from "../../assets/flipper-zero/white.png";
+import blackFlipper from "../../assets/flipper-zero/FZBlackNormal.svg";
+import whiteFlipper from "../../assets/flipper-zero/FZWhiteNormal.svg";
+import transparentFlipper from "../../assets/flipper-zero/FZClearNormal.svg";
 
-// hardware_color values come straight from furi_hal_version_get_hw_color():
-//   1 = black, 2 = white, 3 = transparent. 0 / missing / unknown → placeholder.
+const flipperVariants: Record<string, string> = {
+  "1": blackFlipper,
+  "2": whiteFlipper,
+  "3": transparentFlipper,
+};
+
 const COLOR_LABELS: Record<string, string> = {
   "1": "Black",
   "2": "White",
   "3": "Transparent",
 };
-function imageForColor(_code: string | null): string {
-  // TODO(assets): swap to per-variant PNGs once we have them.
-  return whiteFlipper;
+
+function imageForColor(_code: string): string {
+  return flipperVariants[_code] ?? whiteFlipper; // default to white if unknown
 }
-function labelForColor(code: string | null): string | null {
-  if (!code) return null;
-  return COLOR_LABELS[code] ?? null;
+
+function labelForColor(code: string): string {
+  if (!code) return " ";
+  return COLOR_LABELS[code] ?? " ";
 }
 
 export function DeviceInfoView() {
@@ -44,7 +48,10 @@ export function DeviceInfoView() {
   const [info, setInfo] = useState<Record<string, string> | null>(null);
   const [power, setPower] = useState<Record<string, string> | null>(null);
   const [sd, setSd] = useState<StorageInfoType | null>(null);
-  const [internal, setInternal] = useState<StorageInfoType | null>(null);
+  // `/int` on modern firmware is a virtual folder on the SD card, so
+  // `storage_info("/int")` returns SD totals (misleading). We show the recursive
+  // byte count of `/int` contents instead — that's the actual user-visible usage.
+  const [internalBytes, setInternalBytes] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +82,9 @@ export function DeviceInfoView() {
         setSd(null);
       }
       try {
-        setInternal(await storageInfo("/int"));
+        setInternalBytes(await storageDu("/int"));
       } catch {
-        setInternal(null);
+        setInternalBytes(null);
       }
       setFetchedAt(Date.now());
     } catch (e) {
@@ -92,7 +99,7 @@ export function DeviceInfoView() {
       setInfo(null);
       setPower(null);
       setSd(null);
-      setInternal(null);
+      setInternalBytes(null);
       setError(null);
       setFetchedAt(null);
       return;
@@ -101,7 +108,7 @@ export function DeviceInfoView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
 
-  const hardwareColor = info?.["hardware_color"] ?? null;
+  const hardwareColor = info?.["hardware_color"] ?? "";
   const colorLabel = labelForColor(hardwareColor);
   const hwName = deviceInfo?.hardware_name ?? info?.["hardware_name"] ?? "Flipper Zero";
   const hwUid = deviceInfo?.hardware_uid ?? info?.["hardware_uid"] ?? null;
@@ -238,7 +245,7 @@ export function DeviceInfoView() {
               <SystemTile info={info} />
               <BatteryTile power={power} />
               <StorageTile title="Storage (SD)" mount="/ext" data={sd} />
-              <StorageTile title="Storage (Internal)" mount="/int" data={internal} />
+              <InternalNamespaceTile bytes={internalBytes} />
             </div>
           )}
         </div>
@@ -488,6 +495,30 @@ function StorageTile({
         }
       />
       <Row label="Mount" value={<span className="font-mono">{mount}</span>} />
+    </Tile>
+  );
+}
+
+// Modern Flipper firmware (`storage_processing.c`: `storage_process_alias`)
+// unconditionally rewrites any `/int` path to `/ext/<internal_dir>` before
+// dispatch, so `StorageInfoRequest("/int")` returns the SD card's numbers.
+// There's no RPC call that reports true on-chip LFS space. We show the
+// recursive footprint of `/int` contents (which live on the SD) instead —
+// that's the number the user can actually act on.
+function InternalNamespaceTile({ bytes }: { bytes: number | null }) {
+  return (
+    <Tile
+      title="Internal (/int)"
+      icon={<HardDrive size={14} className="text-accent" />}
+    >
+      <Row label="Used" value={bytes != null ? formatBytes(bytes) : null} mono />
+      <Row label="Mount" value={<span className="font-mono">/int</span>} />
+      <div className="mt-2 text-[11px] text-dim leading-snug">
+        On modern firmware, <span className="font-mono">/int</span> is a virtual
+        folder on the SD card — there is no separate on-chip flash budget to
+        report. Shown value is the recursive size of <span className="font-mono">
+        /int</span>'s contents.
+      </div>
     </Tile>
   );
 }

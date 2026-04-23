@@ -250,6 +250,38 @@ pub fn storage_delete(client: &mut FlipperClient, path: &str, recursive: bool) -
     Ok(())
 }
 
+/// Recursively sum the size of all files under `path`. Useful for reporting
+/// usage of the `/int` namespace, which on modern Flipper firmware is aliased
+/// onto the SD card (so `storage_info("/int")` returns the SD card's total/free,
+/// not the internal namespace's actual footprint).
+pub fn storage_du(client: &mut FlipperClient, path: &str) -> Result<u64> {
+    let mut queue: Vec<String> = vec![path.to_string()];
+    let mut total: u64 = 0;
+    while let Some(dir) = queue.pop() {
+        // A missing `/int` (pre-alias firmware, or SD ejected) should surface
+        // as zero usage, not a hard error.
+        let entries = match storage_list(client, &dir) {
+            Ok(v) => v,
+            Err(FlipperError::Rpc { .. }) => continue,
+            Err(e) => return Err(e),
+        };
+        for e in entries {
+            // FileType::DIR = 1 in the protobuf.
+            if e.r#type == 1 {
+                let sub = if dir.ends_with('/') {
+                    format!("{dir}{}", e.name)
+                } else {
+                    format!("{dir}/{}", e.name)
+                };
+                queue.push(sub);
+            } else {
+                total = total.saturating_add(e.size as u64);
+            }
+        }
+    }
+    Ok(total)
+}
+
 /// Get storage space info (total/free bytes) for a storage path (e.g. "/ext" or "/int").
 pub fn storage_info(client: &mut FlipperClient, path: &str) -> Result<(u64, u64)> {
     let resp = send_single(

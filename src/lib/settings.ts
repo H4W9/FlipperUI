@@ -23,6 +23,10 @@ export interface AppSettings {
     /** Absolute Flipper paths excluded from the NFC library scan. */
     excludedDirs: string[];
   };
+  badusb: {
+    /** Absolute Flipper paths excluded from the BadUSB library scan. */
+    excludedDirs: string[];
+  };
   apps: {
     /** Absolute Flipper paths excluded from the App library scan. */
     excludedDirs: string[];
@@ -36,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   subghz: { excludedDirs: [] },
   infrared: { excludedDirs: [] },
   nfc: { excludedDirs: [] },
+  badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
 };
 
@@ -48,6 +53,9 @@ export type SettingsPatch = {
     excludedDirs?: string[];
   };
   nfc?: {
+    excludedDirs?: string[];
+  };
+  badusb?: {
     excludedDirs?: string[];
   };
   apps?: {
@@ -87,6 +95,9 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
     nfc: {
       excludedDirs: patch.nfc?.excludedDirs ?? current.nfc.excludedDirs,
     },
+    badusb: {
+      excludedDirs: patch.badusb?.excludedDirs ?? current.badusb.excludedDirs,
+    },
     apps: {
       excludedDirs: patch.apps?.excludedDirs ?? current.apps.excludedDirs,
       extraDirs: patch.apps?.extraDirs ?? current.apps.extraDirs,
@@ -119,6 +130,10 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
     nfc: {
       excludedDirs:
         raw.nfc?.excludedDirs ?? DEFAULT_SETTINGS.nfc.excludedDirs,
+    },
+    badusb: {
+      excludedDirs:
+        raw.badusb?.excludedDirs ?? DEFAULT_SETTINGS.badusb.excludedDirs,
     },
     apps: {
       excludedDirs:

@@ -36,6 +36,16 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Flipper monochrome icons (inline SVG, themed via currentColor) ──────── */
+.flipper-svg-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.flipper-svg-icon svg * {
+  fill: currentColor !important;
+}
+
 /* ── Scrollbar styling ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

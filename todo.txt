@@ -28,12 +28,34 @@ ______________________________
 TODO - OPEN
 ______________________________
 
+--- META ---
+[ ] brainstorm UI redesign - simplify where possible without losing usability. evaluate: nav rail density, progress feedback patterns, library row actions, global-search placement, overall information density
+
+--- FIXES / IMPROVEMENTS ---
+[ ] change BLE scan duration to 10s
+[ ] Settings -> exclude directories -> add auto-completion
+[ ] visually indicate loading-process in the time from pressing the scan button in libraries ultil the progress bar starts
+[ ] fix screen sharing over BLE - currently broken / no frames; investigate whether screen-stream reader path works over the BLE transport at all or needs a BLE-specific pump
+[ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)
+[ ] clear library entries synchronously on deviceUid change - prevents a flash of the prior device's entries before the async cache load completes (subghz/ir/nfc/badusb)
+[ ] extract shared library-scan backend helper - dedupe the validate_root + mode check + client lock + cached_map + progress-emit boilerplate repeated across subghz/ir/nfc/badusb commands; makes adding RFID + future libraries near-trivial
+
 --- ASSETS ---
 [ ] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
 
 --- NEW FEATURES ---
 [ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
+[ ] add BadUSB Library (same as with infrared/nfc/subghz) - shows a list like all the other librarys, with cache and everything. should show BadUSB and BadKB files. with file-preview
+[ ] add RFID Library - same as NFC-Library but showing all 125khZ RFID files etc.
+[ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this)
+[ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter
+[ ] library "recently added" / mtime sort column - mtime is already captured in every library, just not exposed as a sort option
+[ ] drag-drop export from library rows to Finder - reuse @crabnebula/tauri-plugin-drag already wired in File Browser
+[ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query. needs a design pass to check it doesn't crowd the header; may need to test a few placements before committing
+[ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON so users can transplant their library index between machines without re-scanning
+[ ] BLE keep-scanning / live-discovery mode - devices appear as they're discovered (AirDrop-style) instead of a fixed-window snapshot; user stops the scan manually
+[ ] cache script / signal text in library caches - currently entries store metadata only; storing the file body (or first N KB) would let BadUSB / SubGhz / IR / NFC previews work fully offline
 
 --- SUBGHZ ---
 [ ] subghz library cache + background re-scan - persist scanned entries via tauri-plugin-store keyed by device UID, render cache instantly on view open, only re-read files whose mtime changed
@@ -54,6 +76,7 @@ ______________________________
 [ ] i18n - actually translate strings (UI dropdown is wired but inert)
 [ ] auto-clear transmittingPath if user backs out of Sub-GHz on the device (listen for AppStateResponse)
 [ ] nfc emulation - wire Emulate button on rows (NFC_emulate or similar RPC / app-launch flow)
+[ ] duckyscript syntax highlighting in BadUSB preview (once the preview is re-enabled) - tokenize DELAY / STRING / GUI / ENTER / etc., color keywords vs args
 
 
 ______________________________
@@ -103,3 +126,5 @@ ______________________________
 [x] send input events to flipper via screen viewer (D-pad + keyboard shortcuts in ScreenViewer)
 [x] screen capture - save current flipper screen as PNG via canvas.toDataURL
 [x] file drag-out - drag files FROM file browser to Finder via @crabnebula/tauri-plugin-drag
+[x] grey out + disable side-rail nav items while no flipper is connected; also disable CLI while connected over BLE (Settings stays clickable)
+[x] collapsible side-rail - hamburger toggle at the top switches between icon-only (w-14) and icon+label (w-48) modes

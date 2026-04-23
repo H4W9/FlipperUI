@@ -45,17 +45,17 @@ export function SubGhzLibrary() {
   }, [setProgress]);
 
   // Hydrate from the on-disk cache the moment we know which device we're on.
-  // Gives instant render without waiting for a scan; only hydrate when the
-  // in-memory list is empty so we don't clobber a fresher just-finished scan.
+  // Fires on every deviceUid change, which includes reconnecting — fine
+  // because scans always persist to the same cache, so memory == disk. The
+  // blanket replace also guarantees that connecting a *different* device
+  // flushes stale entries that survived the last disconnect.
   useEffect(() => {
     if (!deviceUid) return;
     let cancelled = false;
     loadSubghzCache(deviceUid).then((cache) => {
-      if (cancelled || !cache) return;
-      setCacheScannedAt(cache.scannedAt);
-      if (useFlipperStore.getState().subghzEntries.length === 0) {
-        setEntries(cache.entries);
-      }
+      if (cancelled) return;
+      setCacheScannedAt(cache?.scannedAt ?? null);
+      setEntries(cache?.entries ?? []);
     });
     return () => {
       cancelled = true;
@@ -113,10 +113,8 @@ export function SubGhzLibrary() {
     });
   }, [entries, query, protocolFilter]);
 
-  if (!isConnected) {
-    // SubGhzLibrary is only routed when connected, but guard anyway.
-    return null;
-  }
+  // The library view is reachable while disconnected as long as the cache
+  // holds entries — scanning degrades inside the toolbar in that case.
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -131,6 +129,7 @@ export function SubGhzLibrary() {
         total={entries.length}
         filtered={filtered.length}
         lastScannedAt={cacheScannedAt}
+        isConnected={isConnected}
       />
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 bg-danger/10 border-b border-danger/30 text-xs text-danger">

@@ -8,10 +8,12 @@ import { SettingsPane } from "./components/Settings/SettingsPane";
 import { SubGhzLibrary } from "./components/SubGhzLibrary/SubGhzLibrary";
 import { InfraredLibrary } from "./components/InfraredLibrary/InfraredLibrary";
 import { NfcLibrary } from "./components/NfcLibrary/NfcLibrary";
+import { BadUsbLibrary } from "./components/BadUsbLibrary/BadUsbLibrary";
 import { AppLibrary } from "./components/AppLibrary/AppLibrary";
 import { DeviceInfoView } from "./components/DeviceInfo/DeviceInfoView";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
+import flipperOutlineUrl from "./assets/flipper-outline.svg";
 
 export default function App() {
   const activeView = useFlipperStore((s) => s.activeView);
@@ -64,17 +66,34 @@ function ActivePane({
   activeView: ActiveView;
   isConnected: boolean;
 }) {
+  const subghzCount = useFlipperStore((s) => s.subghzEntries.length);
+  const irCount = useFlipperStore((s) => s.irEntries.length);
+  const nfcCount = useFlipperStore((s) => s.nfcEntries.length);
+  const badusbCount = useFlipperStore((s) => s.badusbEntries.length);
+
   if (activeView === "settings") {
     return <SettingsPane />;
+  }
+
+  // Cached libraries stay browsable while offline. The scan/upload/row
+  // actions degrade inside the view itself — see each library component.
+  if (activeView === "subghz" && (isConnected || subghzCount > 0)) {
+    return <SubGhzLibrary />;
+  }
+  if (activeView === "infrared" && (isConnected || irCount > 0)) {
+    return <InfraredLibrary />;
+  }
+  if (activeView === "nfc" && (isConnected || nfcCount > 0)) {
+    return <NfcLibrary />;
+  }
+  if (activeView === "badusb" && (isConnected || badusbCount > 0)) {
+    return <BadUsbLibrary />;
   }
 
   if (!isConnected) {
     return <DisconnectedEmptyState />;
   }
 
-  if (activeView === "subghz") return <SubGhzLibrary />;
-  if (activeView === "infrared") return <InfraredLibrary />;
-  if (activeView === "nfc") return <NfcLibrary />;
   if (activeView === "apps") return <AppLibrary />;
   if (activeView === "info") return <DeviceInfoView />;
   if (activeView === "cli") return <CliPanel />;
@@ -90,20 +109,24 @@ function ActivePane({
 
 function DisconnectedEmptyState() {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-dim">
-      <svg
-        width="48"
-        height="48"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
+    <div className="flex-1 flex flex-col items-center justify-center gap-4 text-dim">
+      <div
+        aria-hidden
         className="text-elevated"
-      >
-        <rect x="7" y="2" width="10" height="20" rx="2" />
-        <path d="M12 18h.01" />
-        <path d="M9 7h6" />
-      </svg>
+        style={{
+          width: 240,
+          height: 178,
+          backgroundColor: "currentColor",
+          WebkitMaskImage: `url(${flipperOutlineUrl})`,
+          maskImage: `url(${flipperOutlineUrl})`,
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+        }}
+      />
       <p className="text-sm">Connect a Flipper Zero to get started</p>
     </div>
   );

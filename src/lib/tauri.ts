@@ -7,6 +7,7 @@ import type { DeviceInfo, FileEntry, PortInfo, StorageInfo } from "../types/flip
 import type { SubGhzEntry } from "../types/subghz";
 import type { IrEntry } from "../types/infrared";
 import type { NfcEntry } from "../types/nfc";
+import type { BadUsbEntry } from "../types/badusb";
 import type { AppEntry } from "../types/apps";
 import { getCliCleanupPromise } from "../components/CliPanel/CliPanel";
 
@@ -98,6 +99,14 @@ export const storageRename = async (oldPath: string, newPath: string): Promise<v
 export const storageInfo = async (path: string): Promise<StorageInfo> => {
   await awaitCliCleanup();
   return invoke<StorageInfo>("storage_info", { path });
+};
+
+// Recursive sum of file sizes under `path`. Used for the `/int` namespace —
+// modern firmware aliases `/int` onto the SD card, so `storage_info("/int")`
+// reports the SD's numbers, not the internal namespace's actual footprint.
+export const storageDu = async (path: string): Promise<number> => {
+  await awaitCliCleanup();
+  return invoke<number>("storage_du", { path });
 };
 
 export const storageTimestamp = async (path: string): Promise<number> => {
@@ -259,6 +268,32 @@ export const nfcScan = async (
 /** Abort an in-progress NFC library scan. */
 export const nfcCancelScan = (): Promise<void> =>
   invoke<void>("nfc_cancel_scan");
+
+// ── BadUSB library ──────────────────────────────────────────────────────
+
+/**
+ * Scan `/ext/badusb` and `/ext/badkb` recursively for `.txt` Duckyscript
+ * files, parse line counts + leading comments, and return the combined list.
+ * Emits "badusb-scan-progress" events as it works.
+ */
+export const badusbScan = async (
+  usbRoot: string,
+  kbRoot: string,
+  excludedDirs: string[],
+  cached?: BadUsbEntry[],
+): Promise<BadUsbEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<BadUsbEntry[]>("badusb_scan", {
+    usb_root: usbRoot,
+    kb_root: kbRoot,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress BadUSB library scan. */
+export const badusbCancelScan = (): Promise<void> =>
+  invoke<void>("badusb_cancel_scan");
 
 // ── Apps library ────────────────────────────────────────────────────────
 

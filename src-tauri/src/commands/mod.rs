@@ -1,5 +1,6 @@
 pub mod app;
 pub mod apps;
+pub mod badusb;
 pub mod cli;
 pub mod device;
 pub mod diag;

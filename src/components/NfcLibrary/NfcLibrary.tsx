@@ -48,15 +48,16 @@ export function NfcLibrary() {
     return () => unlisten?.();
   }, [setProgress]);
 
+  // Rehydrate from disk on every deviceUid change — swaps in the new device's
+  // cache (or clears, if it has never been scanned) so entries from a prior
+  // device don't linger after reconnect to a different one.
   useEffect(() => {
     if (!deviceUid) return;
     let cancelled = false;
     loadNfcCache(deviceUid).then((cache) => {
-      if (cancelled || !cache) return;
-      setCacheScannedAt(cache.scannedAt);
-      if (useFlipperStore.getState().nfcEntries.length === 0) {
-        setEntries(cache.entries);
-      }
+      if (cancelled) return;
+      setCacheScannedAt(cache?.scannedAt ?? null);
+      setEntries(cache?.entries ?? []);
     });
     return () => {
       cancelled = true;
@@ -116,6 +117,10 @@ export function NfcLibrary() {
 
   const uploadMany = useCallback(
     async (paths: string[]) => {
+      if (!isConnected) {
+        setError("Connect a Flipper to upload .nfc files.");
+        return;
+      }
       const nfcs = paths.filter((p) => p.toLowerCase().endsWith(".nfc"));
       if (nfcs.length === 0) {
         setError("No .nfc files in the drop — nothing to upload.");
@@ -134,7 +139,7 @@ export function NfcLibrary() {
         setUploadingCount(0);
       }
     },
-    [uploadOne, runScan, setError],
+    [uploadOne, runScan, setError, isConnected],
   );
 
   useEffect(() => {
@@ -195,7 +200,7 @@ export function NfcLibrary() {
     });
   }, [entries, query, deviceTypeFilter]);
 
-  if (!isConnected) return null;
+  // Browsable while disconnected — scan, upload, and drag-drop degrade below.
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
@@ -212,6 +217,7 @@ export function NfcLibrary() {
         total={entries.length}
         filtered={filtered.length}
         lastScannedAt={cacheScannedAt}
+        isConnected={isConnected}
       />
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 bg-danger/10 border-b border-danger/30 text-xs text-danger">
