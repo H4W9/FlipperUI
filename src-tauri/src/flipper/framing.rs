@@ -24,7 +24,9 @@ pub fn read_varint(t: &mut dyn Transport) -> Result<u32> {
         if shift >= 35 {
             // A u32 needs at most 5 varint bytes (35 bits). Anything larger
             // is either a corrupt stream or a >4 GB value we can't handle.
-            return Err(FlipperError::Decode(prost::DecodeError::new("varint overflow")));
+            return Err(FlipperError::Decode(prost::DecodeError::new(
+                "varint overflow",
+            )));
         }
     }
     if result > u32::MAX as u64 {
@@ -94,7 +96,9 @@ mod tests {
                 std::io::Read::read_exact(&mut cursor, &mut b).unwrap();
                 let byte = b[0] as u64;
                 result |= (byte & 0x7F) << shift;
-                if byte & 0x80 == 0 { break; }
+                if byte & 0x80 == 0 {
+                    break;
+                }
                 shift += 7;
             }
             assert_eq!(result as u32, v, "varint roundtrip failed for {v}");

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -10,6 +11,14 @@ export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
   build: {
     target: "safari15", // macOS WebView target
+    rollupOptions: {
+      // Two HTML entry points: the main app and the splash window that
+      // Tauri shows first while Rust initializes.
+      input: {
+        main: resolve(__dirname, "index.html"),
+        splash: resolve(__dirname, "splash.html"),
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

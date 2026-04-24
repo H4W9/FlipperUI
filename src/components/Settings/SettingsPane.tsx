@@ -1,9 +1,25 @@
 import { useEffect, useId, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { Wrench, RadioTower, Tv, Nfc, Usb, LayoutGrid, Languages, Info, X, Plus } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  Wrench,
+  RadioTower,
+  Tv,
+  Nfc,
+  Usb,
+  LayoutGrid,
+  Languages,
+  Info,
+  MonitorCog,
+  X,
+  Plus,
+} from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
 import { useDirectorySuggestions } from "../../lib/useDirectorySuggestions";
+
+const IS_MACOS =
+  typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 const LANGUAGE_OPTIONS = [{ code: "en", label: "English" }];
 
@@ -53,6 +69,27 @@ export function SettingsPane() {
     setSettings(next);
   };
 
+  const onTrayEnabledChange = async (enabled: boolean) => {
+    const next = await updateSettings({ tray: { enabled } });
+    setSettings(next);
+    await invoke("set_tray_enabled", { enabled }).catch(() => {});
+    // If the tray is turned off we also force the dock icon back on — an app
+    // with no tray and no dock is unreachable once the window is hidden.
+    if (!enabled && next.tray.hideDockIcon) {
+      await invoke("set_dock_visible", { visible: true }).catch(() => {});
+    } else if (enabled) {
+      await invoke("set_dock_visible", {
+        visible: !next.tray.hideDockIcon,
+      }).catch(() => {});
+    }
+  };
+
+  const onHideDockChange = async (hideDockIcon: boolean) => {
+    const next = await updateSettings({ tray: { hideDockIcon } });
+    setSettings(next);
+    await invoke("set_dock_visible", { visible: !hideDockIcon }).catch(() => {});
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-4">
@@ -95,6 +132,37 @@ export function SettingsPane() {
               ))}
             </select>
           </Row>
+        </Section>
+
+        <Section icon={<MonitorCog size={13} />} title="System">
+          <Row
+            label="Show tray icon"
+            hint="Show the FlipperUI icon in the system tray / menubar. Left-click toggles the window; right-click opens Show/Hide/Quit."
+          >
+            <Toggle
+              checked={settings?.tray.enabled ?? true}
+              disabled={!settings}
+              onChange={onTrayEnabledChange}
+              ariaLabel="Show tray icon"
+            />
+          </Row>
+          {IS_MACOS && (
+            <Row
+              label="Hide Dock icon"
+              hint={
+                settings?.tray.enabled
+                  ? "Run as a menubar-only app. The tray icon remains the way to reach the window."
+                  : "Enable the tray icon first — otherwise the app would be unreachable with the window hidden."
+              }
+            >
+              <Toggle
+                checked={settings?.tray.hideDockIcon ?? false}
+                disabled={!settings || !settings.tray.enabled}
+                onChange={onHideDockChange}
+                ariaLabel="Hide Dock icon"
+              />
+            </Row>
+          )}
         </Section>
 
         <Section icon={<RadioTower size={13} />} title="Sub-GHz">
@@ -209,6 +277,38 @@ function Row({
       </div>
       <div className="shrink-0">{children}</div>
     </div>
+  );
+}
+
+function Toggle({
+  checked,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-border-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        checked ? "bg-accent" : "bg-surface"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-primary shadow-sm transition-transform ${
+          checked ? "translate-x-[18px]" : "translate-x-0.5"
+        }`}
+      />
+    </button>
   );
 }
 

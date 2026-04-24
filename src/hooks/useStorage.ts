@@ -70,14 +70,17 @@ export function useStorage() {
     }
   }, [setError, setTransferProgress]);
 
-  const uploadFile = useCallback(async (localPath: string) => {
+  // `destDir` lets a drop target (folder row) upload into a path that isn't
+  // the currently-shown directory. Defaults to currentPath for normal uploads.
+  const uploadFile = useCallback(async (localPath: string, destDir?: string) => {
     const currentPath = useFlipperStore.getState().currentPath;
+    const dir = destDir ?? currentPath;
     let unlisten: (() => void) | undefined;
     let failed = false;
     try {
       const localBytes = await readFile(localPath);
       const fileName = localPath.split("/").pop() ?? "file";
-      const remotePath = joinPath(currentPath, fileName);
+      const remotePath = joinPath(dir, fileName);
 
       setTransferProgress(0);
 
@@ -88,7 +91,9 @@ export function useStorage() {
       const b64 = uint8ArrayToBase64(localBytes);
       await storageWrite(remotePath, b64);
 
-      await refresh(currentPath);
+      // Only refresh the visible listing when the upload landed there;
+      // otherwise the user is still looking at currentPath and we'd flicker.
+      if (dir === currentPath) await refresh(currentPath);
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);

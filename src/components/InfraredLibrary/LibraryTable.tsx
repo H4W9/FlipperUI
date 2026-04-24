@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
+import { useExportDrag } from "../../hooks/useExportDrag";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveInfraredCache } from "../../lib/infraredCache";
 import type { IrEntry } from "../../types/infrared";
@@ -161,6 +162,7 @@ function Row({ entry, allEntries }: { entry: IrEntry; allEntries: IrEntry[] }) {
   const relDir = relativeDir(entry.path, IR_ROOT);
   const protocolsLabel = summarizeProtocols(entry);
   const hasRaw = entry.signals.some((s) => s.kind === "raw");
+  const handleDragStart = useExportDrag(entry.path, entry.name);
 
   const persistList = async (next: IrEntry[]) => {
     setEntries(next);
@@ -256,6 +258,8 @@ function Row({ entry, allEntries }: { entry: IrEntry; allEntries: IrEntry[] }) {
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
+      draggable={!renaming}
+      onDragStart={handleDragStart}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

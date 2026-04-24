@@ -5,9 +5,10 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { cliStart, cliSend } from "../../lib/tauri";
 
 // Module-level promise to track CLI cleanup - allows other operations to await
-let cliCleanupPromise: Promise<void> | null = null;
+const cliCleanupPromise: Promise<void> | null = null;
 
 /** Returns the current CLI cleanup promise, if any */
+// eslint-disable-next-line react-refresh/only-export-components
 export const getCliCleanupPromise = () => cliCleanupPromise;
 
 export function CliPanel() {

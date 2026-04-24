@@ -69,10 +69,12 @@ pub fn app_button_press(client: &mut FlipperClient, args: &str) -> Result<()> {
         command_id: id,
         command_status: 0,
         has_next: false,
-        content: Some(Content::AppButtonPressRequest(pb_app::AppButtonPressRequest {
-            args: args.to_string(),
-            index: 0,
-        })),
+        content: Some(Content::AppButtonPressRequest(
+            pb_app::AppButtonPressRequest {
+                args: args.to_string(),
+                index: 0,
+            },
+        )),
     };
     write_message(&mut *client.transport, &req)?;
     let resp = read_message(&mut *client.transport)?;

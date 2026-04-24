@@ -33,7 +33,9 @@ impl From<pb_storage::File> for FileEntry {
 /// Validate that a Flipper storage path is safe (no traversal, must be absolute).
 fn validate_path(path: &str) -> Result<()> {
     if path.contains("..") {
-        return Err(FlipperError::Session("Path traversal (..) is not allowed".into()));
+        return Err(FlipperError::Session(
+            "Path traversal (..) is not allowed".into(),
+        ));
     }
     if !path.starts_with("/ext") && !path.starts_with("/int") && !path.starts_with("/any") {
         return Err(FlipperError::Session(
@@ -120,11 +122,10 @@ pub async fn storage_read(
                 c,
                 &path,
                 |received, total| {
-                    let pct = if total > 0 {
-                        (received * 100 / total) as u32
-                    } else {
-                        0
-                    };
+                    let pct = (received * 100)
+                        .checked_div(total)
+                        .map(|v| v as u32)
+                        .unwrap_or(0);
                     let _ = app.emit("download-progress", pct);
                 },
                 &cancelled,
@@ -245,7 +246,9 @@ pub async fn storage_du(path: String, state: State<'_, AppState>) -> Result<u64>
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
-        with_client(&mode_mutex, &client_mutex, |c| storage::storage_du(c, &path))
+        with_client(&mode_mutex, &client_mutex, |c| {
+            storage::storage_du(c, &path)
+        })
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?

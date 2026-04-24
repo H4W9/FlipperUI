@@ -168,10 +168,7 @@ fn cli_reader_loop(
                 let _ = app.emit("cli-output", &text);
             }
             Some(Err(_)) => {
-                let _ = app.emit(
-                    "cli-output",
-                    "\r\n[serial error — device disconnected]\r\n",
-                );
+                let _ = app.emit("cli-output", "\r\n[serial error — device disconnected]\r\n");
                 active.store(false, Ordering::Relaxed);
                 break;
             }

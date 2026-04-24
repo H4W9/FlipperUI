@@ -18,13 +18,11 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { startDrag } from "@crabnebula/tauri-plugin-drag";
-import { writeFile } from "@tauri-apps/plugin-fs";
-import { tempDir } from "@tauri-apps/api/path";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
-import { storageRead, storageTarExtract, storageTimestamp } from "../../lib/tauri";
-import { base64ToUint8Array, joinPath } from "../../lib/encoding";
+import { useExportDrag } from "../../hooks/useExportDrag";
+import { storageTarExtract, storageTimestamp } from "../../lib/tauri";
+import { joinPath } from "../../lib/encoding";
 import { Spinner } from "../ui/Spinner";
 import type { FileEntry } from "../../types/flipper";
 
@@ -276,26 +274,23 @@ function FileRow({
     onSelect(entry.name, e);
   };
 
-  const handleDragStart = useCallback(async (e: React.DragEvent) => {
-    if (isDir) return;
-    e.preventDefault();
-    try {
-      const remotePath = joinPath(currentPath, entry.name);
-      const b64 = await storageRead(remotePath);
-      const bytes = base64ToUint8Array(b64);
+  const exportDrag = useExportDrag(joinPath(currentPath, entry.name), entry.name);
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      if (isDir) return;
+      void exportDrag(e);
+    },
+    [isDir, exportDrag],
+  );
 
-      const tmp = await tempDir();
-      const tmpFile = `${tmp}${entry.name}`;
-      await writeFile(tmpFile, bytes);
-      await startDrag({ item: [tmpFile], icon: "" });
-    } catch {
-      // Drag cancelled or download failed — silently ignore
-    }
-  }, [isDir, currentPath, entry.name]);
+  // Folder rows tag themselves with `data-drop-folder` so FileBrowser can
+  // hit-test where a native drag landed and upload directly into that folder.
+  const dropFolder = isDir ? joinPath(currentPath, entry.name) : undefined;
 
   return (
     <div
       style={style}
+      data-drop-folder={dropFolder}
       draggable={!isDir && !isRenaming}
       className={`flex items-center gap-2 px-3 border-b border-border-subtle/60 hover:bg-surface/40 group text-sm ${
         isDir && !isRenaming ? "cursor-pointer" : ""

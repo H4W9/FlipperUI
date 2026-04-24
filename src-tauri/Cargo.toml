@@ -1,6 +1,6 @@
 [package]
 name = "flipperui"
-version = "0.2.2"
+version = "0.3.0"
 description = "FlipperUI - A Tauri-based Flipper Zero file-manager and Signal-Library"
 authors = ["maz"]
 edition = "2021"
@@ -15,7 +15,7 @@ prost-build = "0.13"
 protoc-bin-vendored = "3"
 
 [dependencies]
-tauri = { version = "2", features = ["wry"] }
+tauri = { version = "2", features = ["wry", "tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }

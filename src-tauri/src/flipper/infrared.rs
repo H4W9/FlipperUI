@@ -21,7 +21,7 @@ use crate::flipper::client::FlipperClient;
 use crate::flipper::storage;
 
 /// One signal block from inside a .ir file.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct IrSignal {
     pub name: String,
     /// Either "parsed" or "raw" — mirrors the `type:` key in the file.
@@ -195,20 +195,6 @@ pub fn parse_ir(path: &str, name: &str, text: &str) -> IrEntry {
         name: name.to_string(),
         signals,
         mtime: None,
-    }
-}
-
-impl Default for IrSignal {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            kind: String::new(),
-            protocol: None,
-            address: None,
-            command: None,
-            frequency: None,
-            duty_cycle: None,
-        }
     }
 }
 

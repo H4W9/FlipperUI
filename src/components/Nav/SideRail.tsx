@@ -1,5 +1,6 @@
 import {
   FolderTree,
+  Home,
   Info,
   Menu,
   Monitor,
@@ -40,6 +41,7 @@ interface RailItem {
 }
 
 const TOP_ITEMS: RailItem[] = [
+  { view: "dashboard", label: "Dashboard", Icon: Home },
   { view: "files", label: "File Explorer", Icon: FolderTree, requiresConnection: true },
   { view: "apps", label: "Apps", Icon: flipperIcon(pluginsIconSvg, "plugins"), requiresConnection: true },
   { view: "subghz", label: "Sub-GHz", Icon: flipperIcon(subghzIconSvg, "subghz"), requiresConnection: true, browsableOffline: "subghz" },

@@ -11,11 +11,7 @@ use crate::state::{AppState, ConnectionMode};
 /// `FlipperError::Rpc` without tearing down the connection — those failures
 /// are recoverable from the user's side.
 #[tauri::command]
-pub async fn app_start(
-    name: String,
-    args: String,
-    state: State<'_, AppState>,
-) -> Result<()> {
+pub async fn app_start(name: String, args: String, state: State<'_, AppState>) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
 

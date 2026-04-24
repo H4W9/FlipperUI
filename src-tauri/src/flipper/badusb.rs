@@ -167,7 +167,10 @@ pub fn parse_script(path: &str, name: &str, kind: &str, text: &str) -> BadUsbEnt
         line_count += 1;
 
         if comment.is_none() {
-            if let Some(rest) = trimmed.strip_prefix("REM ").or_else(|| trimmed.strip_prefix("rem ")) {
+            if let Some(rest) = trimmed
+                .strip_prefix("REM ")
+                .or_else(|| trimmed.strip_prefix("rem "))
+            {
                 let c = rest.trim();
                 if !c.is_empty() {
                     comment = Some(c.to_string());

@@ -224,8 +224,14 @@ mod tests {
 
     #[test]
     fn strip_suffix_ignore_case_works() {
-        assert_eq!("foo.FAP".strip_suffix_ignore_case(".fap"), Some("foo".into()));
-        assert_eq!("foo.fap".strip_suffix_ignore_case(".FAP"), Some("foo".into()));
+        assert_eq!(
+            "foo.FAP".strip_suffix_ignore_case(".fap"),
+            Some("foo".into())
+        );
+        assert_eq!(
+            "foo.fap".strip_suffix_ignore_case(".FAP"),
+            Some("foo".into())
+        );
         assert_eq!("foo.txt".strip_suffix_ignore_case(".fap"), None);
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Usb, RefreshCw, Power, Battery, HardDrive } from "lucide-react";
+import { Usb, RefreshCw, Power, Battery, HardDrive, Bluetooth } from "lucide-react";
 import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
@@ -184,11 +184,10 @@ export function DevicePanel() {
 
       {/* Transport toggle (USB / BLE) */}
       <div className="flex items-center gap-2 select-none">
-        <span
-          className={`text-xs font-medium ${transport === "usb" ? "text-primary" : "text-muted"}`}
-        >
-          USB
-        </span>
+        <Usb
+          className={`w-3.5 h-3.5 ${transport === "usb" ? "text-primary" : "text-muted"}`}
+          aria-label="USB"
+        />
         <button
           type="button"
           role="switch"
@@ -206,11 +205,10 @@ export function DevicePanel() {
             }`}
           />
         </button>
-        <span
-          className={`text-xs font-medium ${transport === "ble" ? "text-primary" : "text-muted"}`}
-        >
-          BLE
-        </span>
+        <Bluetooth
+          className={`w-3.5 h-3.5 ${transport === "ble" ? "text-primary" : "text-muted"}`}
+          aria-label="BLE"
+        />
       </div>
 
       {/* Port selector (USB only) */}

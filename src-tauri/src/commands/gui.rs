@@ -201,9 +201,7 @@ fn screen_reader_loop(
                     };
                     Ok(Some(data))
                 }
-                Err(FlipperError::Io(ref e))
-                    if e.kind() == std::io::ErrorKind::TimedOut =>
-                {
+                Err(FlipperError::Io(ref e)) if e.kind() == std::io::ErrorKind::TimedOut => {
                     Ok(None)
                 }
                 Err(e) => Err(e),

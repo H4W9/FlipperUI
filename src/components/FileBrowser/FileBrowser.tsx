@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BreadcrumbBar } from "./BreadcrumbBar";
 import { Toolbar } from "./Toolbar";
@@ -14,6 +14,12 @@ export function FileBrowser() {
   const { currentPath, transferProgress } = useFlipperStore();
   const { refresh, uploadFile } = useStorage();
   const [isDragOver, setIsDragOver] = useState(false);
+  // Folder under the cursor during a drag, so we can highlight it and route
+  // the drop into it instead of the visible directory.
+  const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
+  // Tauri's drop event reports physical pixels; cache the latest devicePixelRatio
+  // for the duration of a drag (it doesn't change mid-drag).
+  const dprRef = useRef(window.devicePixelRatio || 1);
 
   const handleCancelTransfer = useCallback(() => {
     cancelTransfer().catch(() => {});
@@ -25,29 +31,63 @@ export function FileBrowser() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Apply (or clear) a highlight ring on the folder row currently under the
+  // drag cursor. Uses a single CSS class swap so we don't have to re-render the
+  // (virtualized) list on every "over" event.
+  useEffect(() => {
+    const HILITE = "ring-2";
+    const HILITE2 = "ring-accent/70";
+    document
+      .querySelectorAll<HTMLElement>(`[data-drop-folder].${HILITE}`)
+      .forEach((el) => el.classList.remove(HILITE, HILITE2));
+    if (!hoveredFolder) return;
+    document
+      .querySelectorAll<HTMLElement>(
+        `[data-drop-folder="${cssEscape(hoveredFolder)}"]`,
+      )
+      .forEach((el) => el.classList.add(HILITE, HILITE2));
+  }, [hoveredFolder]);
+
   // Listen for native file drag-and-drop events
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    getCurrentWebviewWindow().onDragDropEvent((event) => {
-      if (cancelled) return;
-      if (event.payload.type === "enter") {
-        setIsDragOver(true);
-      } else if (event.payload.type === "leave") {
-        setIsDragOver(false);
-      } else if (event.payload.type === "drop") {
-        setIsDragOver(false);
-        const paths = event.payload.paths;
-        (async () => {
-          for (const path of paths) {
-            await uploadFile(path);
-          }
-        })();
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
+    const folderAt = (physX: number, physY: number): string | null => {
+      const x = physX / dprRef.current;
+      const y = physY / dprRef.current;
+      const el = document.elementFromPoint(x, y);
+      const row = el?.closest<HTMLElement>("[data-drop-folder]");
+      return row?.dataset.dropFolder || null;
+    };
+
+    getCurrentWebviewWindow()
+      .onDragDropEvent((event) => {
+        if (cancelled) return;
+        if (event.payload.type === "enter") {
+          dprRef.current = window.devicePixelRatio || 1;
+          setIsDragOver(true);
+          setHoveredFolder(folderAt(event.payload.position.x, event.payload.position.y));
+        } else if (event.payload.type === "over") {
+          setHoveredFolder(folderAt(event.payload.position.x, event.payload.position.y));
+        } else if (event.payload.type === "leave") {
+          setIsDragOver(false);
+          setHoveredFolder(null);
+        } else if (event.payload.type === "drop") {
+          const dest = folderAt(event.payload.position.x, event.payload.position.y);
+          setIsDragOver(false);
+          setHoveredFolder(null);
+          const paths = event.payload.paths;
+          (async () => {
+            for (const path of paths) {
+              await uploadFile(path, dest ?? undefined);
+            }
+          })();
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
 
     return () => {
       cancelled = true;
@@ -65,15 +105,34 @@ export function FileBrowser() {
         <ProgressBar value={transferProgress} onCancel={handleCancelTransfer} />
       )}
 
-      {/* Drag-and-drop overlay */}
+      {/* Drag-and-drop overlay. Stays semi-transparent so the user can still
+          see (and aim at) the folder rows underneath. `pointer-events-none`
+          keeps the OS drag flowing through to elementFromPoint hit-testing. */}
       {isDragOver && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-app/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 px-8 py-6 border-2 border-dashed border-accent/60 rounded-xl">
-            <Upload size={32} className="text-accent" />
-            <span className="text-sm text-accent/80 font-medium">Drop files to upload</span>
+        <div className="absolute inset-0 z-40 flex items-end justify-center pb-6 bg-app/30 pointer-events-none">
+          <div className="flex flex-col items-center gap-1 px-5 py-3 border-2 border-dashed border-accent/60 bg-panel/90 rounded-xl shadow-xl">
+            <div className="flex items-center gap-2 text-accent">
+              <Upload size={18} />
+              <span className="text-sm font-medium">
+                {hoveredFolder ? "Drop into folder" : "Drop to upload here"}
+              </span>
+            </div>
+            <span className="text-[11px] font-mono text-secondary truncate max-w-md">
+              {hoveredFolder ?? currentPath}
+            </span>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// CSS.escape isn't available in older Tauri webviews; fall back to a manual
+// escape that handles the only special chars we'll see in paths (slashes,
+// dots, spaces, etc.).
+function cssEscape(s: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(s);
+  }
+  return s.replace(/["\\]/g, "\\$&");
 }

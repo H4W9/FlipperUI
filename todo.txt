@@ -33,7 +33,7 @@ ______________________________
 
 --- FIXES / IMPROVEMENTS ---
 [ ] fix screen sharing over BLE - currently broken / no frames; investigate whether screen-stream reader path works over the BLE transport at all or needs a BLE-specific pump
-
+[ ] Tray Icon - add option to show monochrome icon. remove orange background from appicon to use as monochrome tray-icon
 --- ASSETS ---
 
 --- NEW FEATURES ---

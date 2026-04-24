@@ -10,3 +10,5 @@ pub mod library_scan;
 pub mod nfc;
 pub mod storage;
 pub mod subghz;
+pub mod tray;
+pub mod window;

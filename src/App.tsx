@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { DevicePanel } from "./components/DevicePanel/DevicePanel";
 import { FileBrowser } from "./components/FileBrowser/FileBrowser";
 import { CliPanel } from "./components/CliPanel/CliPanel";
@@ -11,8 +12,11 @@ import { NfcLibrary } from "./components/NfcLibrary/NfcLibrary";
 import { BadUsbLibrary } from "./components/BadUsbLibrary/BadUsbLibrary";
 import { AppLibrary } from "./components/AppLibrary/AppLibrary";
 import { DeviceInfoView } from "./components/DeviceInfo/DeviceInfoView";
+import { Dashboard } from "./components/Dashboard/Dashboard";
+import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
+import { loadSettings } from "./lib/settings";
 import flipperOutlineUrl from "./assets/flipper-outline.svg";
 
 export default function App() {
@@ -21,6 +25,34 @@ export default function App() {
   const isConnected = useFlipperStore((s) => s.isConnected);
   const setConnected = useFlipperStore((s) => s.setConnected);
   const setError = useFlipperStore((s) => s.setError);
+
+  // Close the splash window and show the main window once React has mounted.
+  // We can't gate on rAF here because the main window starts with
+  // `visible: false`, and macOS WebKit throttles requestAnimationFrame in
+  // windows that have never been shown — the callback would never fire and
+  // the splash would stick forever. Invoking directly from the mount effect
+  // is good enough: by the time this runs, the DOM has been rendered and the
+  // webview is ready to paint as soon as the OS makes it visible.
+  useEffect(() => {
+    void invoke("close_splashscreen").catch(() => {});
+  }, []);
+
+  // Apply persisted system-UI preferences (tray icon, dock visibility) on
+  // every startup. The Rust side creates the tray by default and leaves the
+  // dock icon visible, so we only need to call through when the stored
+  // settings differ from those defaults.
+  useEffect(() => {
+    loadSettings()
+      .then(async (s) => {
+        if (!s.tray.enabled) {
+          await invoke("set_tray_enabled", { enabled: false }).catch(() => {});
+        }
+        if (s.tray.enabled && s.tray.hideDockIcon) {
+          await invoke("set_dock_visible", { visible: false }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // The Rust side emits `flipper-disconnected` when the screen-stream reader
   // (or any other background worker) tears the client down after an
@@ -55,6 +87,7 @@ export default function App() {
         <DevicePanel />
         <ActivePane activeView={activeView} isConnected={isConnected} />
       </div>
+      <CommandPalette />
     </div>
   );
 }
@@ -73,6 +106,12 @@ function ActivePane({
 
   if (activeView === "settings") {
     return <SettingsPane />;
+  }
+
+  // Dashboard works while disconnected — it shows cached library counts and
+  // an offline placeholder where live stats would go.
+  if (activeView === "dashboard") {
+    return <Dashboard />;
   }
 
   // Cached libraries stay browsable while offline. The scan/upload/row

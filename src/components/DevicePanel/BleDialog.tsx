@@ -49,7 +49,6 @@ export function BleDialog({ onClose }: BleDialogProps) {
   // loop even while a BLE session is already active.
   useEffect(() => {
     scan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

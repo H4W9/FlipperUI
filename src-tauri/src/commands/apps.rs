@@ -103,10 +103,7 @@ pub fn apps_cancel_scan(state: State<AppState>) -> Result<()> {
 /// Returns `Ok(None)` when the file has no embedded icon (or the manifest
 /// can't be located) — the UI then falls back to the placeholder glyph.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn apps_read_icon(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<Option<String>> {
+pub async fn apps_read_icon(path: String, state: State<'_, AppState>) -> Result<Option<String>> {
     if !path.to_lowercase().ends_with(".fap") {
         return Err(FlipperError::Session("Not a .fap file".into()));
     }
@@ -128,9 +125,8 @@ pub async fn apps_read_icon(
         let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
 
         let bytes = storage::storage_read(client, &path, |_, _| {}, &cancelled)?;
-        let icon = fap_icon::extract(&bytes).map(|d| {
-            base64::engine::general_purpose::STANDARD.encode(d.icon)
-        });
+        let icon = fap_icon::extract(&bytes)
+            .map(|d| base64::engine::general_purpose::STANDARD.encode(d.icon));
         Ok(icon)
     })
     .await

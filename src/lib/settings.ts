@@ -33,6 +33,12 @@ export interface AppSettings {
     /** Additional absolute Flipper paths scanned beyond the default /ext/apps. */
     extraDirs: string[];
   };
+  tray: {
+    /** When true, show the system-tray / menubar icon. */
+    enabled: boolean;
+    /** macOS only: when true and tray is enabled, hide the app from the Dock. */
+    hideDockIcon: boolean;
+  };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -42,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nfc: { excludedDirs: [] },
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
+  tray: { enabled: true, hideDockIcon: false },
 };
 
 export type SettingsPatch = {
@@ -61,6 +68,10 @@ export type SettingsPatch = {
   apps?: {
     excludedDirs?: string[];
     extraDirs?: string[];
+  };
+  tray?: {
+    enabled?: boolean;
+    hideDockIcon?: boolean;
   };
 };
 
@@ -102,6 +113,10 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
       excludedDirs: patch.apps?.excludedDirs ?? current.apps.excludedDirs,
       extraDirs: patch.apps?.extraDirs ?? current.apps.extraDirs,
     },
+    tray: {
+      enabled: patch.tray?.enabled ?? current.tray.enabled,
+      hideDockIcon: patch.tray?.hideDockIcon ?? current.tray.hideDockIcon,
+    },
   };
   await store.set(STORE_KEY, next);
   cached = next;
@@ -139,6 +154,11 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
       excludedDirs:
         raw.apps?.excludedDirs ?? DEFAULT_SETTINGS.apps.excludedDirs,
       extraDirs: raw.apps?.extraDirs ?? DEFAULT_SETTINGS.apps.extraDirs,
+    },
+    tray: {
+      enabled: raw.tray?.enabled ?? DEFAULT_SETTINGS.tray.enabled,
+      hideDockIcon:
+        raw.tray?.hideDockIcon ?? DEFAULT_SETTINGS.tray.hideDockIcon,
     },
   };
 }

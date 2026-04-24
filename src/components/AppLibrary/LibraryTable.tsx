@@ -20,6 +20,7 @@ import {
   storageRename,
 } from "../../lib/tauri";
 import { saveAppsCache } from "../../lib/appsCache";
+import { useExportDrag } from "../../hooks/useExportDrag";
 import { base64ToUint8Array } from "../../lib/encoding";
 import { FapIcon } from "./FapIcon";
 import type { AppEntry } from "../../types/apps";
@@ -202,6 +203,7 @@ function Row({
   const relDir = relativeDir(entry.path, entry.root);
   const launching = launchingPath === entry.path;
   const anyLaunching = launchingPath !== null;
+  const handleDragStart = useExportDrag(entry.path, `${entry.name}.fap`);
 
   const persistList = async (next: AppEntry[]) => {
     setEntries(next);
@@ -312,6 +314,8 @@ function Row({
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
+      draggable={!renaming}
+      onDragStart={handleDragStart}
     >
       <FapIcon bytes={icon?.icon} size={20} />
       <div className="flex flex-col min-w-0">

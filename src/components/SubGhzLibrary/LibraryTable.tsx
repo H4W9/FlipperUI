@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFlipperStore } from "../../store/useFlipperStore";
+import { useExportDrag } from "../../hooks/useExportDrag";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveSubghzCache } from "../../lib/subghzCache";
 import type { SubGhzEntry } from "../../types/subghz";
@@ -164,6 +165,7 @@ function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntr
   const [busy, setBusy] = useState<"rename" | "dup" | "delete" | null>(null);
 
   const relDir = relativeDir(entry.path, SUBGHZ_ROOT);
+  const handleDragStart = useExportDrag(entry.path, entry.name);
 
   const persistList = async (next: SubGhzEntry[]) => {
     setEntries(next);
@@ -270,6 +272,8 @@ function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntr
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
+      draggable={!renaming}
+      onDragStart={handleDragStart}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

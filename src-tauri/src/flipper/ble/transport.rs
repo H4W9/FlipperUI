@@ -122,34 +122,40 @@ impl BleTransport {
 }
 
 impl Transport for BleTransport {
+    /// Atomic read: wait until the full slice is available, then pop all at
+    /// once. On timeout or close before the buffer has enough bytes, return an
+    /// error with ZERO bytes consumed so the caller's framing state stays in
+    /// sync with the RxBuffer. A non-atomic read here desyncs framing: a
+    /// partial read of a varint-prefixed message leaves payload bytes in the
+    /// buffer that the next call misinterprets as a new length prefix.
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        if buf.is_empty() {
+            return Ok(());
+        }
+        let needed = buf.len();
         let deadline = Instant::now() + self.timeout;
-        let mut filled = 0;
         let mut g = self.rx.inner.lock().unwrap();
-        while filled < buf.len() {
-            while g.bytes.is_empty() && !g.closed {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
-                }
-                let (ng, wr) = self.rx.cv.wait_timeout(g, remaining).unwrap();
-                g = ng;
-                if wr.timed_out() && g.bytes.is_empty() && !g.closed {
-                    return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
-                }
+        while g.bytes.len() < needed && !g.closed {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
             }
-            if g.closed && g.bytes.is_empty() {
-                let reason = g
-                    .close_reason
-                    .clone()
-                    .unwrap_or_else(|| "BLE transport closed".into());
-                return Err(io::Error::new(io::ErrorKind::BrokenPipe, reason));
+            let (ng, wr) = self.rx.cv.wait_timeout(g, remaining).unwrap();
+            g = ng;
+            if wr.timed_out() && g.bytes.len() < needed && !g.closed {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
             }
-            let take = (buf.len() - filled).min(g.bytes.len());
-            for slot in &mut buf[filled..filled + take] {
-                *slot = g.bytes.pop_front().unwrap();
-            }
-            filled += take;
+        }
+        if g.bytes.len() < needed {
+            // Closed before enough bytes arrived — pipe is dead.
+            let reason = g
+                .close_reason
+                .clone()
+                .unwrap_or_else(|| "BLE transport closed".into());
+            return Err(io::Error::new(io::ErrorKind::BrokenPipe, reason));
+        }
+        for slot in buf.iter_mut() {
+            *slot = g.bytes.pop_front().unwrap();
         }
         Ok(())
     }
@@ -190,22 +196,21 @@ impl Transport for BleTransport {
             let n = piece.len() as u32;
             self.wait_free(n)?;
             BLE_RT
-                .block_on(self.peripheral.write(
-                    &self.rx_char,
-                    piece,
-                    WriteType::WithoutResponse,
-                ))
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                .block_on(
+                    self.peripheral
+                        .write(&self.rx_char, piece, WriteType::WithoutResponse),
+                )
+                .map_err(|e| io::Error::other(e.to_string()))?;
             // Optimistically deduct from our local free-bytes estimate. The
             // firmware will correct us with a FLOW_CTRL notification when it
             // actually consumes the bytes; saturating_sub guards against a
             // concurrent notification race where the notification lowered our
             // value below `n` between wait_free and here.
-            let _ = self.overflow.fetch_update(
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-                |v| Some(v.saturating_sub(n)),
-            );
+            let _ = self
+                .overflow
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                    Some(v.saturating_sub(n))
+                });
         }
         Ok(())
     }
@@ -236,7 +241,10 @@ mod tests {
         rx.push(&[1, 2, 3]);
         rx.push(&[4, 5]);
         let g = rx.inner.lock().unwrap();
-        assert_eq!(g.bytes.iter().copied().collect::<Vec<u8>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(
+            g.bytes.iter().copied().collect::<Vec<u8>>(),
+            vec![1, 2, 3, 4, 5]
+        );
     }
 
     #[test]

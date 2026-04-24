@@ -21,6 +21,7 @@ import {
   storageWrite,
 } from "../../lib/tauri";
 import { saveNfcCache } from "../../lib/nfcCache";
+import { useExportDrag } from "../../hooks/useExportDrag";
 import { base64ToUint8Array } from "../../lib/encoding";
 import type { NfcEntry } from "../../types/nfc";
 
@@ -172,6 +173,7 @@ function Row({ entry, allEntries }: { entry: NfcEntry; allEntries: NfcEntry[] })
 
   const relDir = relativeDir(entry.path, NFC_ROOT);
   const typeLabel = summarizeType(entry);
+  const handleDragStart = useExportDrag(entry.path, entry.name);
 
   const persistList = async (next: NfcEntry[]) => {
     setEntries(next);
@@ -283,6 +285,8 @@ function Row({ entry, allEntries }: { entry: NfcEntry; allEntries: NfcEntry[] })
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
+      draggable={!renaming}
+      onDragStart={handleDragStart}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

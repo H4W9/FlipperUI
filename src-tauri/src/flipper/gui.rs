@@ -70,9 +70,7 @@ where
                     break;
                 }
             }
-            Err(FlipperError::Io(ref e))
-                if e.kind() == std::io::ErrorKind::TimedOut =>
-            {
+            Err(FlipperError::Io(ref e)) if e.kind() == std::io::ErrorKind::TimedOut => {
                 // Timeout — just loop again
                 continue;
             }

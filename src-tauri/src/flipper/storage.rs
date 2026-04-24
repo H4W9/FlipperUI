@@ -64,9 +64,7 @@ pub fn storage_stat(client: &mut FlipperClient, path: &str) -> Result<pb_storage
         }),
     )?;
     match resp.content {
-        Some(Content::StorageStatResponse(r)) => {
-            r.file.ok_or(FlipperError::UnexpectedResponse)
-        }
+        Some(Content::StorageStatResponse(r)) => r.file.ok_or(FlipperError::UnexpectedResponse),
         _ => Err(FlipperError::UnexpectedResponse),
     }
 }
@@ -180,7 +178,7 @@ where
             };
             write_message(&mut *client.transport, &abort_frame)?;
             let _ = read_message(&mut *client.transport); // read the response
-            // Delete the incomplete file
+                                                          // Delete the incomplete file
             let _ = storage_delete(client, path, false);
             return Err(FlipperError::TransferCancelled);
         }
@@ -212,11 +210,7 @@ where
 }
 
 /// Rename or move a file/directory on the Flipper.
-pub fn storage_rename(
-    client: &mut FlipperClient,
-    old_path: &str,
-    new_path: &str,
-) -> Result<()> {
+pub fn storage_rename(client: &mut FlipperClient, old_path: &str, new_path: &str) -> Result<()> {
     send_single(
         client,
         Content::StorageRenameRequest(pb_storage::RenameRequest {

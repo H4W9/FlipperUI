@@ -42,10 +42,7 @@ fn parse_flow_ctrl(bytes: &[u8]) -> Option<u32> {
 
 /// `PeripheralId` has no public `FromStr`, so we resolve the frontend-supplied
 /// id by walking the adapter's peripheral cache and matching stringified ids.
-async fn find_by_id(
-    adapter: &btleplug::platform::Adapter,
-    id: &str,
-) -> Result<Option<Peripheral>> {
+async fn find_by_id(adapter: &btleplug::platform::Adapter, id: &str) -> Result<Option<Peripheral>> {
     let peripherals = adapter.peripherals().await.map_err(map_btle_err)?;
     for p in peripherals {
         if p.id().to_string() == id {
@@ -60,10 +57,7 @@ async fn find_by_id(
 /// as soon as the target id turns up in a DeviceDiscovered/DeviceUpdated
 /// event. Bounded at `SCAN_DEADLINE` so a Flipper that never advertises
 /// produces a clear error instead of hanging.
-async fn scan_for_id(
-    adapter: &btleplug::platform::Adapter,
-    target: &str,
-) -> Result<Peripheral> {
+async fn scan_for_id(adapter: &btleplug::platform::Adapter, target: &str) -> Result<Peripheral> {
     const SCAN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(6);
 
     let mut events = adapter.events().await.map_err(map_btle_err)?;
@@ -123,10 +117,7 @@ fn find_char(peripheral: &Peripheral, uuid: uuid::Uuid) -> Result<Characteristic
 /// The returned `cancel_tx` is how the disconnect command asks the notification
 /// task to exit cleanly. Send `()` on it; the task will drop its peripheral
 /// reference and set the RX buffer to `closed`.
-pub fn connect_ble(
-    id: String,
-    app: AppHandle,
-) -> Result<(FlipperClient, oneshot::Sender<()>)> {
+pub fn connect_ble(id: String, app: AppHandle) -> Result<(FlipperClient, oneshot::Sender<()>)> {
     BLE_RT.block_on(async move { connect_ble_async(id, app).await })
 }
 
@@ -174,10 +165,7 @@ async fn connect_ble_async(
     }
 
     tracing::info!("BLE connect: discovering services");
-    peripheral
-        .discover_services()
-        .await
-        .map_err(map_btle_err)?;
+    peripheral.discover_services().await.map_err(map_btle_err)?;
 
     let tx_char = find_char(&peripheral, TX_CHAR)?;
     let rx_char = find_char(&peripheral, RX_CHAR)?;

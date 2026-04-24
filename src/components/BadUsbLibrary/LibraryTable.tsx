@@ -21,6 +21,7 @@ import {
   storageWrite,
 } from "../../lib/tauri";
 import { saveBadUsbCache } from "../../lib/badusbCache";
+import { useExportDrag } from "../../hooks/useExportDrag";
 import { base64ToUint8Array } from "../../lib/encoding";
 import type { BadUsbEntry } from "../../types/badusb";
 
@@ -174,6 +175,7 @@ function Row({
 
   const kindRoot = entry.kind === "kb" ? "/ext/badkb" : "/ext/badusb";
   const relDir = relativeDir(entry.path, kindRoot);
+  const handleDragStart = useExportDrag(entry.path, entry.name);
 
   const persistList = async (next: BadUsbEntry[]) => {
     setEntries(next);
@@ -285,6 +287,8 @@ function Row({
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors cursor-pointer`}
+      draggable={!renaming}
+      onDragStart={handleDragStart}
       onDoubleClick={() => {
         if (!renaming && busy === null) onPreview(entry);
       }}

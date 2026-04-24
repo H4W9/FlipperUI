@@ -88,12 +88,12 @@ pub async fn list_ble_devices() -> Result<Vec<BleDevice>> {
         let name = props.local_name.clone().unwrap_or_default();
         // Primary match: the 16-bit `0x3083` service UUID that Flipper Zero
         // includes in its advertisement data (expanded via the BT base UUID).
-        let matches_advertised = props.services.iter().any(|s| *s == ADVERTISED_SERVICE);
+        let matches_advertised = props.services.contains(&ADVERTISED_SERVICE);
         // Secondary match: the custom Serial service UUID. Not present in the
         // advertisement — only populated in `props.services` once the OS has
         // bonded and cached a service discovery. Treat its presence as a
         // "paired" hint.
-        let matches_serial = props.services.iter().any(|s| *s == SERIAL_SERVICE);
+        let matches_serial = props.services.contains(&SERIAL_SERVICE);
         // Tertiary: case-insensitive name heuristic for bonded peripherals
         // where CoreBluetooth returns a cached name even without ad-data.
         let name_looks_like_flipper = name.to_lowercase().contains("flipper");

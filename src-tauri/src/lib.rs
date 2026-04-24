@@ -1,7 +1,7 @@
-pub mod error;
-pub mod state;
-pub mod flipper;
 pub mod commands;
+pub mod error;
+pub mod flipper;
+pub mod state;
 
 // Include prost-generated protobuf bindings.
 // pb.rs references all other packages, so they must all be declared here.
@@ -31,9 +31,66 @@ pub mod pb {
 }
 
 use state::AppState;
-use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::Emitter;
+use tauri::menu::{
+    AboutMetadataBuilder, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+/// Build the menu that opens from the system-tray icon: Show/Hide window + Quit.
+fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let show = MenuItemBuilder::with_id("tray-show", "Show FlipperUI").build(app)?;
+    let hide = MenuItemBuilder::with_id("tray-hide", "Hide FlipperUI").build(app)?;
+    let quit = MenuItemBuilder::with_id("tray-quit", "Quit FlipperUI").build(app)?;
+    MenuBuilder::new(app)
+        .items(&[&show, &hide])
+        .separator()
+        .item(&quit)
+        .build()
+}
+
+pub const TRAY_ID: &str = "main-tray";
+
+/// Build and install the system-tray icon. Shared between the initial startup
+/// path and the runtime toggle command so the click-handling behaviour stays
+/// identical.
+pub fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let tray_menu = build_tray_menu(app)?;
+    TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip("FlipperUI")
+        .icon(
+            app.default_window_icon()
+                .cloned()
+                .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?,
+        )
+        .menu(&tray_menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(w) = app.get_webview_window("main") {
+                    match w.is_visible().unwrap_or(false) {
+                        true => {
+                            let _ = w.hide();
+                        }
+                        false => {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                            let _ = w.unminimize();
+                        }
+                    }
+                }
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -42,7 +99,7 @@ pub fn run() {
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(tracing_subscriber::fmt::layer())
         .init();
-    
+
     tracing::info!("FlipperUI starting up");
 
     tauri::Builder::default()
@@ -107,11 +164,34 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
-            app.on_menu_event(|app, event| {
-                if event.id().as_ref() == "settings" {
+            app.on_menu_event(|app, event| match event.id().as_ref() {
+                "settings" => {
                     let _ = app.emit("open-settings", ());
                 }
+                // Tray menu items — toggle window visibility / quit.
+                "tray-show" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                        let _ = w.unminimize();
+                    }
+                }
+                "tray-hide" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                }
+                "tray-quit" => {
+                    app.exit(0);
+                }
+                _ => {}
             });
+
+            // System-tray icon. Left-click toggles the window; right-click
+            // (or the context menu gesture) opens the Show/Hide/Quit menu.
+            // The frontend can remove and re-install the tray at runtime via
+            // `set_tray_enabled`, so the build logic lives in a shared helper.
+            install_tray(app.handle())?;
 
             Ok(())
         })
@@ -162,6 +242,9 @@ pub fn run() {
             commands::apps::apps_scan,
             commands::apps::apps_cancel_scan,
             commands::apps::apps_read_icon,
+            commands::window::close_splashscreen,
+            commands::tray::set_tray_enabled,
+            commands::tray::set_dock_visible,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

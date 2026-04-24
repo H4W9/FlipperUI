@@ -7,6 +7,7 @@ import type { BadUsbEntry, BadUsbScanProgress } from "../types/badusb";
 import type { AppEntry, AppIconEntry, AppScanProgress } from "../types/apps";
 
 export type ActiveView =
+  | "dashboard"
   | "files"
   | "subghz"
   | "infrared"
@@ -125,7 +126,7 @@ interface FlipperStore {
 let cliLineId = 0;
 
 export const useFlipperStore = create<FlipperStore>((set) => ({
-  activeView: "files",
+  activeView: "dashboard",
   ports: [],
   selectedPort: null,
   deviceInfo: null,

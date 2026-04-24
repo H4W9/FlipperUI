@@ -126,10 +126,8 @@ fn walk_dir(
         // pb_storage::FileType::Dir = 1 in the firmware enum.
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_sub_extension(&f.name) {
-            if !is_excluded(&child, excluded) {
-                out.push(child);
-            }
+        } else if has_sub_extension(&f.name) && !is_excluded(&child, excluded) {
+            out.push(child);
         }
     }
     Ok(())
@@ -192,10 +190,10 @@ pub fn parse_sub(path: &str, name: &str, text: &str) -> SubGhzEntry {
             "Latitude" | "Lat" => lat_explicit = parse_first_float(v),
             "Longitude" | "Lon" | "Lng" => lon_explicit = parse_first_float(v),
             // Single-line coord fields — Note/Comment/GPS/Coordinates may carry "lat,lon".
-            "GPS" | "Coordinates" | "Coords" | "Note" | "Comment" | "Location" => {
-                if coord_pair_fallback.is_none() {
-                    coord_pair_fallback = parse_coord_pair(v);
-                }
+            "GPS" | "Coordinates" | "Coords" | "Note" | "Comment" | "Location"
+                if coord_pair_fallback.is_none() =>
+            {
+                coord_pair_fallback = parse_coord_pair(v);
             }
             _ => {}
         }
@@ -208,7 +206,10 @@ pub fn parse_sub(path: &str, name: &str, text: &str) -> SubGhzEntry {
             .map(|(lat, lon)| Coordinates { lat, lon }),
     };
 
-    let modulation = preset.as_deref().map(modulation_from_preset).map(String::from);
+    let modulation = preset
+        .as_deref()
+        .map(modulation_from_preset)
+        .map(String::from);
 
     SubGhzEntry {
         path: path.to_string(),

@@ -82,10 +82,7 @@ fn try_read_name(slice: &[u8]) -> Option<String> {
         return None;
     }
     let name = &slice[..first_null];
-    if !name
-        .iter()
-        .all(|&b| b.is_ascii_graphic() || b == b' ')
-    {
+    if !name.iter().all(|&b| b.is_ascii_graphic() || b == b' ') {
         return None;
     }
     if slice[first_null..].iter().any(|&b| b != 0) {
