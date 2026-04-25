@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Usb, RefreshCw, Power, Battery, HardDrive, Bluetooth } from "lucide-react";
-import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot } from "../../lib/tauri";
+import { Usb, Power, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Zap, HardDrive, Bluetooth, Signal, SignalLow, SignalMedium, SignalHigh } from "lucide-react";
+import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -31,6 +31,7 @@ export function DevicePanel() {
   const [batteryCharging, setBatteryCharging] = useState(false);
   const [sdTotal, setSdTotal] = useState<number | null>(null);
   const [sdFree, setSdFree] = useState<number | null>(null);
+  const [latency, setLatency] = useState<number | null>(null);
 
   // Track whether the user manually disconnected — suppresses auto-connect
   // until the device is physically unplugged and re-plugged.
@@ -107,6 +108,7 @@ export function DevicePanel() {
       setBatteryCharging(false);
       setSdTotal(null);
       setSdFree(null);
+      setLatency(null);
       return;
     }
 
@@ -130,6 +132,26 @@ export function DevicePanel() {
     fetchInfo();
     const id = setInterval(fetchInfo, 30000); // refresh every 30s
     return () => clearInterval(id);
+  }, [isConnected]);
+
+  // Poll ping latency for connection-quality indicator.
+  useEffect(() => {
+    if (!isConnected) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const ms = await ping();
+        if (!cancelled) setLatency(ms);
+      } catch {
+        if (!cancelled) setLatency(null);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [isConnected]);
 
   const handleConnect = async () => {
@@ -260,66 +282,67 @@ export function DevicePanel() {
 
       {/* Device info */}
       {deviceInfo && (
-        <div className="flex items-center gap-3 ml-1 text-xs text-secondary">
-          <span className="w-2 h-2 rounded-full bg-success shrink-0" />
-          {deviceInfo.hardware_name && (
-            <span className="text-primary">{deviceInfo.hardware_name}</span>
-          )}
-          {deviceInfo.firmware_version && (
-            <span>fw {deviceInfo.firmware_version}</span>
-          )}
-          {deviceInfo.firmware_build_date && (
-            <span className="text-muted">({deviceInfo.firmware_build_date})</span>
-          )}
-
-          {/* Battery */}
-          {batteryCharge != null && (
-            <span className="flex items-center gap-1" title={`Battery: ${batteryCharge}%${batteryCharging ? " (charging)" : ""}`}>
-              <Battery size={12} className={batteryCharging ? "text-success" : "text-secondary"} />
-              <span>{batteryCharge}%</span>
+        <div className="flex items-center gap-2 ml-1 text-xs">
+          {/* Status pill: pulsing dot + device name + fw */}
+          <div
+            className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface border border-elevated"
+            title={
+              deviceInfo.firmware_build_date
+                ? `Built ${deviceInfo.firmware_build_date}`
+                : undefined
+            }
+          >
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
             </span>
+            {deviceInfo.hardware_name && (
+              <span className="text-primary font-medium">{deviceInfo.hardware_name}</span>
+            )}
+            {deviceInfo.firmware_version && (
+              <span className="text-muted tabular-nums">{deviceInfo.firmware_version}</span>
+            )}
+          </div>
+
+          {/* Battery chip */}
+          {batteryCharge != null && (
+            <BatteryChip charge={Number(batteryCharge)} charging={batteryCharging} />
           )}
 
-          {/* SD card space */}
+          {/* Signal/latency chip */}
+          <SignalChip latencyMs={latency} transport={transport} />
+
+          {/* SD card chip */}
           {sdTotal != null && sdFree != null && (
-            <span
-              className="flex items-center gap-1"
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface border border-elevated text-secondary"
               title={`SD: ${formatBytes(sdTotal - sdFree)} used / ${formatBytes(sdTotal)} total (${formatBytes(sdFree)} free)`}
             >
-              <HardDrive size={12} />
-              <span>{sdUsedPct}%</span>
-              <div className="w-14 h-1.5 bg-elevated rounded-full overflow-hidden">
+              <HardDrive size={12} className="text-muted" />
+              <span className="tabular-nums">{sdUsedPct}%</span>
+              <div className="w-12 h-1 bg-elevated rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${(sdUsedPct ?? 0) > 90 ? "bg-danger" : "bg-accent-hover"}`}
+                  className={`h-full rounded-full transition-all ${
+                    (sdUsedPct ?? 0) > 90 ? "bg-danger" : "bg-accent-hover"
+                  }`}
                   style={{ width: `${sdUsedPct}%` }}
                 />
               </div>
-            </span>
+            </div>
           )}
 
           {/* Reboot button */}
           <button
             onClick={() => setShowRebootConfirm(true)}
-            className="p-1 text-muted hover:text-accent rounded transition-colors"
+            className="ml-1 p-1.5 text-muted hover:text-accent hover:bg-elevated rounded-full transition-colors"
             title="Reboot device"
           >
-            <Power size={12} />
+            <Power size={13} />
           </button>
         </div>
       )}
 
-      {/* Spacer + refresh icon */}
       <div className="flex-1" />
-      <button
-        onClick={async () => {
-          const p = await listPorts().catch(() => []);
-          setPorts(p);
-        }}
-        className="text-muted hover:text-primary p-1 rounded transition-colors"
-        title="Refresh ports"
-      >
-        <RefreshCw size={14} />
-      </button>
 
       {showRebootConfirm && (
         <ConfirmDialog
@@ -333,6 +356,75 @@ export function DevicePanel() {
       )}
 
       {showBleDialog && <BleDialog onClose={() => setShowBleDialog(false)} />}
+    </div>
+  );
+}
+
+function BatteryChip({ charge, charging }: { charge: number; charging: boolean }) {
+  const Icon =
+    charge <= 15
+      ? BatteryWarning
+      : charge <= 35
+      ? BatteryLow
+      : charge <= 75
+      ? BatteryMedium
+      : BatteryFull;
+  const color =
+    charge <= 15
+      ? "text-danger"
+      : charge <= 35
+      ? "text-warning"
+      : "text-success";
+  return (
+    <div
+      className="relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface border border-elevated text-secondary"
+      title={`Battery: ${charge}%${charging ? " (charging)" : ""}`}
+    >
+      <span className="relative inline-flex">
+        <Icon size={13} className={color} />
+        {charging && (
+          <Zap
+            size={9}
+            className="absolute -top-0.5 -right-1 text-warning fill-warning"
+          />
+        )}
+      </span>
+      <span className="tabular-nums">{charge}%</span>
+    </div>
+  );
+}
+
+function SignalChip({
+  latencyMs,
+  transport,
+}: {
+  latencyMs: number | null;
+  transport: "usb" | "ble";
+}) {
+  const Icon =
+    latencyMs == null
+      ? Signal
+      : latencyMs < 50
+      ? SignalHigh
+      : latencyMs < 150
+      ? SignalMedium
+      : SignalLow;
+  const color =
+    latencyMs == null
+      ? "text-muted"
+      : latencyMs < 50
+      ? "text-success"
+      : latencyMs < 150
+      ? "text-warning"
+      : "text-danger";
+  const label = latencyMs == null ? "—" : `${latencyMs} ms`;
+  return (
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface border border-elevated text-secondary"
+      title={`${transport.toUpperCase()} link: ${label} round-trip`}
+    >
+      <Icon size={13} className={color} />
+      <span className="tabular-nums">{label}</span>
     </div>
   );
 }

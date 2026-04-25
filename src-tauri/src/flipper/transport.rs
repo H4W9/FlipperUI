@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io;
 use std::time::Duration;
 
@@ -26,6 +27,12 @@ pub trait Transport: Send {
     /// Set the blocking timeout applied to subsequent read calls.
     fn set_timeout(&mut self, dur: Duration) -> io::Result<()>;
 
+    /// Push bytes back so the next `read_exact` / `read` returns them first.
+    /// Used by the framing layer to roll back a partial read on mid-frame
+    /// timeout — without it, a varint byte popped before the timeout would
+    /// be lost, desyncing the protobuf framing.
+    fn unread(&mut self, bytes: &[u8]);
+
     /// Which physical transport backs this — used by upper layers for feature gating.
     fn kind(&self) -> TransportKind;
 }
@@ -40,20 +47,65 @@ pub enum TransportKind {
 /// Adapter wrapping `Box<dyn serialport::SerialPort>` in the [`Transport`] trait.
 pub struct SerialTransport {
     pub port: Box<dyn serialport::SerialPort>,
+    /// Bytes pushed back via `unread` — drained before any new port read.
+    pushback: VecDeque<u8>,
 }
 
 impl SerialTransport {
     pub fn new(port: Box<dyn serialport::SerialPort>) -> Self {
-        Self { port }
+        Self {
+            port,
+            pushback: VecDeque::new(),
+        }
     }
 }
 
 impl Transport for SerialTransport {
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        std::io::Read::read_exact(&mut self.port, buf)
+        // Drain pushback first.
+        let mut filled = 0;
+        while filled < buf.len() {
+            let Some(b) = self.pushback.pop_front() else {
+                break;
+            };
+            buf[filled] = b;
+            filled += 1;
+        }
+        if filled == buf.len() {
+            return Ok(());
+        }
+        // Read the rest from the port. If we time out partway, push the
+        // bytes we did get back into pushback so the caller can roll back
+        // cleanly — std `Read::read_exact` would silently drop them.
+        let start = filled;
+        while filled < buf.len() {
+            match std::io::Read::read(&mut self.port, &mut buf[filled..]) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "serial port returned 0 bytes",
+                    ));
+                }
+                Ok(n) => filled += n,
+                Err(e) => {
+                    if filled > start {
+                        self.pushback.extend(buf[start..filled].iter().copied());
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        Ok(())
     }
 
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.pushback.is_empty() {
+            let take = buf.len().min(self.pushback.len());
+            for slot in &mut buf[..take] {
+                *slot = self.pushback.pop_front().unwrap();
+            }
+            return Ok(take);
+        }
         std::io::Read::read(&mut self.port, buf)
     }
 
@@ -67,6 +119,13 @@ impl Transport for SerialTransport {
 
     fn set_timeout(&mut self, dur: Duration) -> io::Result<()> {
         self.port.set_timeout(dur).map_err(io::Error::other)
+    }
+
+    fn unread(&mut self, bytes: &[u8]) {
+        // Prepend so the original byte order is preserved on next read.
+        for b in bytes.iter().rev() {
+            self.pushback.push_front(*b);
+        }
     }
 
     fn kind(&self) -> TransportKind {

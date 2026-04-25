@@ -77,6 +77,8 @@ pub struct BleTransport {
     pub(crate) rx: Arc<RxShared>,
     pub(crate) overflow: Arc<AtomicU32>,
     pub(crate) timeout: Duration,
+    /// Bytes pushed back via `unread` — drained before any new RxBuffer read.
+    pushback: VecDeque<u8>,
 }
 
 impl BleTransport {
@@ -92,6 +94,7 @@ impl BleTransport {
             rx,
             overflow,
             timeout: Duration::from_secs(5),
+            pushback: VecDeque::new(),
         }
     }
 
@@ -133,29 +136,43 @@ impl Transport for BleTransport {
             return Ok(());
         }
         let needed = buf.len();
-        let deadline = Instant::now() + self.timeout;
-        let mut g = self.rx.inner.lock().unwrap();
-        while g.bytes.len() < needed && !g.closed {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
+        let from_pushback = self.pushback.len().min(needed);
+        let from_rx = needed - from_pushback;
+
+        // Atomic wait: we only commit pops (from pushback OR rx) once the
+        // total available is enough for the whole buffer.
+        if from_rx > 0 {
+            let deadline = Instant::now() + self.timeout;
+            let mut g = self.rx.inner.lock().unwrap();
+            while g.bytes.len() < from_rx && !g.closed {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
+                }
+                let (ng, wr) = self.rx.cv.wait_timeout(g, remaining).unwrap();
+                g = ng;
+                if wr.timed_out() && g.bytes.len() < from_rx && !g.closed {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
+                }
             }
-            let (ng, wr) = self.rx.cv.wait_timeout(g, remaining).unwrap();
-            g = ng;
-            if wr.timed_out() && g.bytes.len() < needed && !g.closed {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout"));
+            if g.bytes.len() < from_rx {
+                let reason = g
+                    .close_reason
+                    .clone()
+                    .unwrap_or_else(|| "BLE transport closed".into());
+                return Err(io::Error::new(io::ErrorKind::BrokenPipe, reason));
             }
-        }
-        if g.bytes.len() < needed {
-            // Closed before enough bytes arrived — pipe is dead.
-            let reason = g
-                .close_reason
-                .clone()
-                .unwrap_or_else(|| "BLE transport closed".into());
-            return Err(io::Error::new(io::ErrorKind::BrokenPipe, reason));
-        }
-        for slot in buf.iter_mut() {
-            *slot = g.bytes.pop_front().unwrap();
+            // Commit: drain pushback first, then rx.
+            for slot in &mut buf[..from_pushback] {
+                *slot = self.pushback.pop_front().unwrap();
+            }
+            for slot in &mut buf[from_pushback..] {
+                *slot = g.bytes.pop_front().unwrap();
+            }
+        } else {
+            for slot in buf.iter_mut() {
+                *slot = self.pushback.pop_front().unwrap();
+            }
         }
         Ok(())
     }
@@ -163,6 +180,13 @@ impl Transport for BleTransport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
+        }
+        if !self.pushback.is_empty() {
+            let take = buf.len().min(self.pushback.len());
+            for slot in &mut buf[..take] {
+                *slot = self.pushback.pop_front().unwrap();
+            }
+            return Ok(take);
         }
         let deadline = Instant::now() + self.timeout;
         let mut g = self.rx.inner.lock().unwrap();
@@ -224,6 +248,12 @@ impl Transport for BleTransport {
     fn set_timeout(&mut self, dur: Duration) -> io::Result<()> {
         self.timeout = dur;
         Ok(())
+    }
+
+    fn unread(&mut self, bytes: &[u8]) {
+        for b in bytes.iter().rev() {
+            self.pushback.push_front(*b);
+        }
     }
 
     fn kind(&self) -> TransportKind {

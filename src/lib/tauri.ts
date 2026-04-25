@@ -135,6 +135,9 @@ export const deviceInfoAll = (): Promise<Record<string, string>> =>
 export const reboot = (mode: number): Promise<void> =>
   invoke<void>("reboot", { mode });
 
+/** Round-trip ping latency in milliseconds. */
+export const ping = (): Promise<number> => invoke<number>("ping");
+
 // ── Screen streaming commands ───────────────────────────────────────────
 
 /** Start streaming the Flipper's screen. Emits "screen-frame" events with base64 RGBA data. */

@@ -32,8 +32,10 @@ ______________________________
 [ ] brainstorm UI redesign - simplify where possible without losing usability. evaluate: nav rail density, progress feedback patterns, library row actions, global-search placement, overall information density
 
 --- FIXES / IMPROVEMENTS ---
-[ ] fix screen sharing over BLE - currently broken / no frames; investigate whether screen-stream reader path works over the BLE transport at all or needs a BLE-specific pump
 [ ] Tray Icon - add option to show monochrome icon. remove orange background from appicon to use as monochrome tray-icon
+[ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens
+[ ] persist transport choice + last-used port in settings so reopening the app doesn't reset to USB every time
+[ ] live screen viewer thumbnail in the dashboard - tiny preview of the Flipper screen so you don't have to open the full overlay just to see what's on the device
 --- ASSETS ---
 
 --- NEW FEATURES ---
@@ -123,5 +125,6 @@ ______________________________
 [x] Settings excluded-dirs autocompletion - <datalist> fed by storageList() via useDirectorySuggestions hook, per-parent cached; wired into ExcludedDirsEditor (SubGhz/IR/NFC) + AbsoluteDirListEditor (BadUSB/Apps extra+excluded)
 [x] library scan loading UX - indeterminate sliding bar + "Preparing scan…" label while total=0; flips to determinate on first progress event; shared ScanProgressBar component used by all 5 library toolbars
 [x] shared library-scan backend helper - commands/library_scan.rs::run_library_scan<E,F> owns validate_root + mode check + client lock + cached_map + progress-emit; subghz/infrared/nfc/badusb commands collapsed to ~25 lines each
+[x] fix screen sharing over BLE - root cause was non-transactional read_varint: 100ms screen-stream timeout firing mid-varint popped a byte from the BLE RxBuffer and dropped it on the floor, desyncing framing into "Protobuf decode error: invalid tag value 0". Fixed by adding Transport::unread + a pushback buffer in BleTransport/SerialTransport and making read_varint/read_message roll back consumed bytes on timeout
 [x] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
 [ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)

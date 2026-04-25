@@ -259,6 +259,29 @@ pub async fn power_info(state: State<'_, AppState>) -> Result<HashMap<String, St
     .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
+/// Ping the device and return the round-trip latency in milliseconds.
+#[tauri::command]
+pub async fn ping(state: State<'_, AppState>) -> Result<u32> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mode = mode_mutex.lock().unwrap();
+        if *mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+        drop(mode);
+
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        let started = std::time::Instant::now();
+        session::ping(client)?;
+        Ok(started.elapsed().as_millis().min(u32::MAX as u128) as u32)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
 /// Reboot the Flipper Zero.
 /// mode: 0 = OS (normal reboot), 1 = DFU, 2 = UPDATE
 #[tauri::command]

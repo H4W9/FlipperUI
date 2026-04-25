@@ -216,6 +216,7 @@ pub fn run() {
             commands::storage::cancel_transfer,
             commands::device::power_info,
             commands::device::device_info_all,
+            commands::device::ping,
             commands::device::reboot,
             commands::cli::cli_start,
             commands::cli::cli_send,
