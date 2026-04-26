@@ -32,13 +32,16 @@ ______________________________
 [ ] brainstorm UI redesign - simplify where possible without losing usability. evaluate: nav rail density, progress feedback patterns, library row actions, global-search placement, overall information density
 
 --- FIXES / IMPROVEMENTS ---
-[ ] Tray Icon - add option to show monochrome icon. remove orange background from appicon to use as monochrome tray-icon
 [ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens
 [ ] persist transport choice + last-used port in settings so reopening the app doesn't reset to USB every time
 [ ] live screen viewer thumbnail in the dashboard - tiny preview of the Flipper screen so you don't have to open the full overlay just to see what's on the device
+[ ] filter/remove path from the name of the flipper in the serial-connection select - on macOS it's the "/dev/" we could at least remove
+[ ] open flyout-menu on tray-icon click - showing basic info like battery percentage etc and shortcuts to open the dashboard and other functions of the app
+
 --- ASSETS ---
 
 --- NEW FEATURES ---
+[ ] add notifications for Scans finished etc.
 [ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
 [ ] add BadUSB Library (same as with infrared/nfc/subghz) - shows a list like all the other librarys, with cache and everything. should show BadUSB and BadKB files. with file-preview
@@ -51,6 +54,7 @@ ______________________________
 [ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON so users can transplant their library index between machines without re-scanning
 [ ] BLE keep-scanning / live-discovery mode - devices appear as they're discovered (AirDrop-style) instead of a fixed-window snapshot; user stops the scan manually
 [ ] cache script / signal text in library caches - currently entries store metadata only; storing the file body (or first N KB) would let BadUSB / SubGhz / IR / NFC previews work fully offline
+[ ] Device-Settings schema awareness - replace the generic per-line key=value editor with typed editors per known file (dropdowns for keybind keys/types/actions, file picker for .fap paths, enum pickers for momentum_settings keys, etc.)
 
 --- SUBGHZ ---
 [ ] subghz library cache + background re-scan - persist scanned entries via tauri-plugin-store keyed by device UID, render cache instantly on view open, only re-read files whose mtime changed
@@ -128,3 +132,6 @@ ______________________________
 [x] fix screen sharing over BLE - root cause was non-transactional read_varint: 100ms screen-stream timeout firing mid-varint popped a byte from the BLE RxBuffer and dropped it on the floor, desyncing framing into "Protobuf decode error: invalid tag value 0". Fixed by adding Transport::unread + a pushback buffer in BleTransport/SerialTransport and making read_varint/read_message roll back consumed bytes on timeout
 [x] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
 [ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)
+[x] File Manager -> SD/Internal storage toggle above the file explorer (HardDrive ↔ Cpu icons, mirrors USB/BLE switch style); flipping resets path to /ext or /int
+[x] Tray Icon - monochrome option in Settings → System; bundled tray-monochrome.png (template image on macOS for menubar tinting); persisted in tray.monochromeIcon and re-applied on startup + after re-enabling tray
+[x] Dashboard library counts pre-load — usePreloadLibraries hook hydrates all 5 library caches (subghz/ir/nfc/badusb/apps) from disk on deviceUid change, so the Dashboard tiles show real counts immediately instead of 0 until each library view is opened

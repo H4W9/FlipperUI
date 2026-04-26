@@ -52,18 +52,63 @@ fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
 pub const TRAY_ID: &str = "main-tray";
 
+/// Raw PNG bytes for the monochrome tray glyph. Pre-sized to fit menubar
+/// proportions; on macOS we mark it as a template image so it adopts the
+/// menubar's foreground color automatically.
+const TRAY_MONOCHROME_PNG: &[u8] = include_bytes!("../icons/tray-monochrome.png");
+
+/// Resolve the icon to use for the tray. `monochrome` swaps in the flat glyph;
+/// otherwise we use the app's default window icon. Exposed under
+/// `tray_icon_for` so commands::tray can re-skin a running tray without
+/// rebuilding it.
+pub fn tray_icon_for(
+    app: &tauri::AppHandle,
+    monochrome: bool,
+) -> tauri::Result<tauri::image::Image<'static>> {
+    if monochrome {
+        let raw = tauri::image::Image::from_bytes(TRAY_MONOCHROME_PNG)?;
+        // macOS scales tray icons to fit the menubar height. To make the
+        // glyph render at ~50% of menubar height, we centre it inside a
+        // square transparent canvas double the source's max dimension.
+        return Ok(pad_to_square(&raw, 1));
+    }
+    app.default_window_icon()
+        .cloned()
+        .map(tauri::image::Image::to_owned)
+        .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))
+}
+
+/// Centre `src` inside a square transparent RGBA canvas whose side equals
+/// `multiplier × max(src.width, src.height)`. Used to add empty padding
+/// around tray glyphs so the OS scales the visible mark to a fraction of
+/// the menubar height instead of filling it edge-to-edge.
+fn pad_to_square(src: &tauri::image::Image<'_>, multiplier: u32) -> tauri::image::Image<'static> {
+    let sw = src.width();
+    let sh = src.height();
+    let side = sw.max(sh).saturating_mul(multiplier).max(1);
+    let mut canvas = vec![0u8; (side as usize) * (side as usize) * 4];
+    let off_x = ((side - sw) / 2) as usize;
+    let off_y = ((side - sh) / 2) as usize;
+    let stride = side as usize * 4;
+    let row_bytes = sw as usize * 4;
+    let src_bytes = src.rgba();
+    for row in 0..sh as usize {
+        let dst_off = (off_y + row) * stride + off_x * 4;
+        let src_off = row * row_bytes;
+        canvas[dst_off..dst_off + row_bytes]
+            .copy_from_slice(&src_bytes[src_off..src_off + row_bytes]);
+    }
+    tauri::image::Image::new(&canvas, side, side).to_owned()
+}
+
 /// Build and install the system-tray icon. Shared between the initial startup
 /// path and the runtime toggle command so the click-handling behaviour stays
 /// identical.
-pub fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+pub fn install_tray(app: &tauri::AppHandle, monochrome: bool) -> tauri::Result<()> {
     let tray_menu = build_tray_menu(app)?;
-    TrayIconBuilder::with_id(TRAY_ID)
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("FlipperUI")
-        .icon(
-            app.default_window_icon()
-                .cloned()
-                .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?,
-        )
+        .icon(tray_icon_for(app, monochrome)?)
         .menu(&tray_menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -89,6 +134,7 @@ pub fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    let _ = tray.set_icon_as_template(monochrome);
     Ok(())
 }
 
@@ -191,7 +237,7 @@ pub fn run() {
             // (or the context menu gesture) opens the Show/Hide/Quit menu.
             // The frontend can remove and re-install the tray at runtime via
             // `set_tray_enabled`, so the build logic lives in a shared helper.
-            install_tray(app.handle())?;
+            install_tray(app.handle(), commands::tray::tray_monochrome())?;
 
             Ok(())
         })
@@ -246,6 +292,7 @@ pub fn run() {
             commands::window::close_splashscreen,
             commands::tray::set_tray_enabled,
             commands::tray::set_dock_visible,
+            commands::tray::set_tray_monochrome,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

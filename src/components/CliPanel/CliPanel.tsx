@@ -2,10 +2,12 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal as TerminalIcon } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { cliStart, cliSend } from "../../lib/tauri";
+import { cliStart, cliSend, cliStop } from "../../lib/tauri";
 
-// Module-level promise to track CLI cleanup - allows other operations to await
-const cliCleanupPromise: Promise<void> | null = null;
+// Module-level promise tracking the in-flight CLI->RPC handover so RPC calls
+// (file browser, etc.) wait for it to finish instead of racing the mode switch.
+// Re-assigned on every unmount; cleared once the underlying cliStop resolves.
+let cliCleanupPromise: Promise<void> | null = null;
 
 /** Returns the current CLI cleanup promise, if any */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -80,6 +82,15 @@ export function CliPanel() {
       mounted = false;
       setCliConnected(false);
       setTimeout(() => unlisten?.(), 0);
+      // Hand the device back to RPC mode and publish the in-flight promise
+      // so the next RPC call (awaitCliCleanup in lib/tauri.ts) blocks until
+      // the mode switch is fully done.
+      const p = cliStop()
+        .catch(() => {})
+        .finally(() => {
+          if (cliCleanupPromise === p) cliCleanupPromise = null;
+        });
+      cliCleanupPromise = p;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

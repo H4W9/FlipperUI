@@ -11,10 +11,11 @@ import {
   Usb,
   Zap,
 } from "lucide-react";
-import { useFlipperStore, type ActiveView } from "../../store/useFlipperStore";
-import { powerInfo, storageDu, storageInfo } from "../../lib/tauri";
+import { useFlipperStore } from "../../store/useFlipperStore";
+import { ping, powerInfo, storageDu, storageInfo } from "../../lib/tauri";
 import { FlipperSvgIcon } from "../ui/FlipperSvgIcon";
 import { Spinner } from "../ui/Spinner";
+import { DeviceSettingsCard } from "../DeviceSettings/DeviceSettingsCard";
 import type { StorageInfo as StorageInfoType } from "../../types/flipper";
 
 import blackFlipper from "../../assets/flipper-zero/FZBlackNormal.svg";
@@ -49,6 +50,7 @@ export function Dashboard() {
   const [power, setPower] = useState<Record<string, string> | null>(null);
   const [sd, setSd] = useState<StorageInfoType | null>(null);
   const [internalBytes, setInternalBytes] = useState<number | null>(null);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
   const inflight = useRef(false);
@@ -75,6 +77,11 @@ export function Dashboard() {
       } catch {
         setInternalBytes(null);
       }
+      try {
+        setLatencyMs(await ping());
+      } catch {
+        setLatencyMs(null);
+      }
       setRefreshedAt(Date.now());
     } finally {
       setLoading(false);
@@ -87,6 +94,7 @@ export function Dashboard() {
       setPower(null);
       setSd(null);
       setInternalBytes(null);
+      setLatencyMs(null);
       setRefreshedAt(null);
       return;
     }
@@ -145,6 +153,9 @@ export function Dashboard() {
                   {deviceInfo?.hardware_name ?? "Flipper Zero"}
                 </h1>
                 <ConnectionPill kind={connectionKind} connected={isConnected} />
+                {isConnected && latencyMs != null && (
+                  <LatencyPill ms={latencyMs} />
+                )}
               </div>
               <div className="text-xs text-secondary flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-start">
                 {deviceInfo?.firmware_version && (
@@ -184,7 +195,7 @@ export function Dashboard() {
               internalBytes={internalBytes}
               loading={loading && !sd}
             />
-            <QuickActionsCard onNavigate={setActiveView} />
+            <DeviceSettingsCard />
           </div>
 
           {/* Library stats */}
@@ -257,6 +268,26 @@ function ConnectionPill({
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded">
       <Icon size={10} />
       {label}
+    </span>
+  );
+}
+
+function LatencyPill({ ms }: { ms: number }) {
+  // Color buckets are tuned for what's typical on each transport: BLE rounds
+  // trips usually land at 30–80 ms, USB at 5–20 ms. Anything past 200 ms means
+  // contention or a struggling link.
+  const tone =
+    ms <= 50
+      ? "text-success bg-success/10 border-success/30"
+      : ms <= 200
+        ? "text-accent bg-accent/10 border-accent/30"
+        : "text-danger bg-danger/10 border-danger/30";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide border rounded ${tone}`}
+      title="Round-trip ping latency"
+    >
+      {ms} ms
     </span>
   );
 }
@@ -415,30 +446,6 @@ function StorageCard({
         </div>
       )}
     </Card>
-  );
-}
-
-function QuickActionsCard({ onNavigate }: { onNavigate: (view: ActiveView) => void }) {
-  return (
-    <Card title="Quick actions" icon={<Zap size={14} className="text-accent" />}>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <ActionButton label="File explorer" onClick={() => onNavigate("files")} />
-        <ActionButton label="Live screen" onClick={() => onNavigate("screen")} />
-        <ActionButton label="Terminal" onClick={() => onNavigate("cli")} />
-        <ActionButton label="Device info" onClick={() => onNavigate("info")} />
-      </div>
-    </Card>
-  );
-}
-
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-2.5 py-2 bg-surface hover:bg-elevated text-primary border border-border-subtle rounded transition-colors text-left"
-    >
-      {label}
-    </button>
   );
 }
 

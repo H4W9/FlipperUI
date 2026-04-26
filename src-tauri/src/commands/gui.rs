@@ -35,15 +35,22 @@ pub fn screen_stream_start(state: State<AppState>, app: AppHandle) -> Result<()>
         return Ok(());
     }
 
-    // Start the stream and shorten the port timeout so the reader thread
-    // releases the client mutex quickly between frames.
+    // Start the stream and pick a reader timeout for the transport. Serial
+    // uses a short window so the OS-level read releases the client mutex
+    // between frames; BLE uses a longer window because waits release the
+    // RxBuffer condvar (not the client mutex) and BLE bodies need ~100 ms
+    // to fully arrive — a 100 ms timeout would expire mid-frame.
     {
         let mut guard = state.client.lock().unwrap();
         let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
         gui::start_screen_stream(client)?;
-        client
-            .transport
-            .set_timeout(crate::flipper::SERIAL_TIMEOUT_SCREEN)?;
+        let timeout = match client.transport.kind() {
+            crate::flipper::transport::TransportKind::Ble => crate::flipper::BLE_TIMEOUT_SCREEN,
+            crate::flipper::transport::TransportKind::Serial => {
+                crate::flipper::SERIAL_TIMEOUT_SCREEN
+            }
+        };
+        client.transport.set_timeout(timeout)?;
     }
 
     // Create the input-event channel. `send_input_event` enqueues events here;

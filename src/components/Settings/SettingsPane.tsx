@@ -73,6 +73,11 @@ export function SettingsPane() {
     const next = await updateSettings({ tray: { enabled } });
     setSettings(next);
     await invoke("set_tray_enabled", { enabled }).catch(() => {});
+    // Re-installing the tray rebuilds it from defaults, so re-apply the
+    // monochrome preference any time we just turned the tray back on.
+    if (enabled && next.tray.monochromeIcon) {
+      await invoke("set_tray_monochrome", { monochrome: true }).catch(() => {});
+    }
     // If the tray is turned off we also force the dock icon back on — an app
     // with no tray and no dock is unreachable once the window is hidden.
     if (!enabled && next.tray.hideDockIcon) {
@@ -88,6 +93,14 @@ export function SettingsPane() {
     const next = await updateSettings({ tray: { hideDockIcon } });
     setSettings(next);
     await invoke("set_dock_visible", { visible: !hideDockIcon }).catch(() => {});
+  };
+
+  const onMonochromeIconChange = async (monochromeIcon: boolean) => {
+    const next = await updateSettings({ tray: { monochromeIcon } });
+    setSettings(next);
+    await invoke("set_tray_monochrome", { monochrome: monochromeIcon }).catch(
+      () => {},
+    );
   };
 
   return (
@@ -144,6 +157,21 @@ export function SettingsPane() {
               disabled={!settings}
               onChange={onTrayEnabledChange}
               ariaLabel="Show tray icon"
+            />
+          </Row>
+          <Row
+            label="Monochrome tray icon"
+            hint={
+              IS_MACOS
+                ? "Use a flat glyph that adopts the menubar's foreground color (light/dark mode aware)."
+                : "Use a flat monochrome glyph instead of the full-color icon."
+            }
+          >
+            <Toggle
+              checked={settings?.tray.monochromeIcon ?? false}
+              disabled={!settings || !settings.tray.enabled}
+              onChange={onMonochromeIconChange}
+              ariaLabel="Monochrome tray icon"
             />
           </Row>
           {IS_MACOS && (

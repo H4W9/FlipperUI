@@ -38,6 +38,9 @@ export interface AppSettings {
     enabled: boolean;
     /** macOS only: when true and tray is enabled, hide the app from the Dock. */
     hideDockIcon: boolean;
+    /** When true, render the tray icon as a flat monochrome glyph that adopts
+     * the menubar's foreground color (template image on macOS). */
+    monochromeIcon: boolean;
   };
 }
 
@@ -48,7 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nfc: { excludedDirs: [] },
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
-  tray: { enabled: true, hideDockIcon: false },
+  tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
 };
 
 export type SettingsPatch = {
@@ -72,6 +75,7 @@ export type SettingsPatch = {
   tray?: {
     enabled?: boolean;
     hideDockIcon?: boolean;
+    monochromeIcon?: boolean;
   };
 };
 
@@ -116,6 +120,8 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
     tray: {
       enabled: patch.tray?.enabled ?? current.tray.enabled,
       hideDockIcon: patch.tray?.hideDockIcon ?? current.tray.hideDockIcon,
+      monochromeIcon:
+        patch.tray?.monochromeIcon ?? current.tray.monochromeIcon,
     },
   };
   await store.set(STORE_KEY, next);
@@ -159,6 +165,8 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
       enabled: raw.tray?.enabled ?? DEFAULT_SETTINGS.tray.enabled,
       hideDockIcon:
         raw.tray?.hideDockIcon ?? DEFAULT_SETTINGS.tray.hideDockIcon,
+      monochromeIcon:
+        raw.tray?.monochromeIcon ?? DEFAULT_SETTINGS.tray.monochromeIcon,
     },
   };
 }

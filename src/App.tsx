@@ -17,6 +17,7 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
 import { loadSettings } from "./lib/settings";
+import { usePreloadLibraries } from "./hooks/usePreloadLibraries";
 import flipperOutlineUrl from "./assets/flipper-outline.svg";
 
 export default function App() {
@@ -25,6 +26,8 @@ export default function App() {
   const isConnected = useFlipperStore((s) => s.isConnected);
   const setConnected = useFlipperStore((s) => s.setConnected);
   const setError = useFlipperStore((s) => s.setError);
+
+  usePreloadLibraries();
 
   // Close the splash window and show the main window once React has mounted.
   // We can't gate on rAF here because the main window starts with
@@ -46,6 +49,10 @@ export default function App() {
       .then(async (s) => {
         if (!s.tray.enabled) {
           await invoke("set_tray_enabled", { enabled: false }).catch(() => {});
+        } else if (s.tray.monochromeIcon) {
+          await invoke("set_tray_monochrome", { monochrome: true }).catch(
+            () => {},
+          );
         }
         if (s.tray.enabled && s.tray.hideDockIcon) {
           await invoke("set_dock_visible", { visible: false }).catch(() => {});
