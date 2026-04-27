@@ -47,7 +47,17 @@ fn validate_path(path: &str) -> Result<()> {
 
 /// Run a closure with exclusive access to the connected FlipperClient.
 /// Rejects the call if the device is in CLI mode.
-/// Tears down the connection on any error so the user must reconnect.
+///
+/// Errors are split into two classes:
+/// - **Fatal** (transport/framing-level): Serial/Io/Decode/Encode. The wire
+///   state is unrecoverable, so the client is dropped and the user must
+///   reconnect. The screen reader (if running) will pick up the cleared mutex
+///   on its next iteration and emit `flipper-disconnected`.
+/// - **Transient** (protocol-level): Rpc/Timeout/UnexpectedResponse/Session/
+///   etc. The connection is still healthy; the request just didn't go through.
+///   Surface the error to the caller without touching the client. This is
+///   crucial during an active screen stream — a single failed `power_info` or
+///   `storage_info` poll used to nuke the entire connection and the stream.
 fn with_client<T>(
     mode_mutex: &Arc<Mutex<ConnectionMode>>,
     client_mutex: &Arc<Mutex<Option<FlipperClient>>>,
@@ -64,9 +74,26 @@ fn with_client<T>(
     match f(client) {
         Ok(v) => Ok(v),
         Err(e) => {
-            *guard = None; // tear down on error; force reconnect
+            if is_fatal_transport_error(&e) {
+                tracing::warn!("with_client tearing down connection: {e}");
+                *guard = None;
+            } else {
+                tracing::debug!("with_client transient error (connection kept): {e}");
+            }
             Err(e)
         }
+    }
+}
+
+/// True for errors that mean the byte-stream/framing is unrecoverable.
+/// Anything else (RPC status errors, timeouts, validation) leaves the
+/// connection healthy.
+fn is_fatal_transport_error(e: &FlipperError) -> bool {
+    match e {
+        FlipperError::Serial(_) => true,
+        FlipperError::Io(io) => io.kind() != std::io::ErrorKind::TimedOut,
+        FlipperError::Decode(_) | FlipperError::Encode(_) => true,
+        _ => false,
     }
 }
 

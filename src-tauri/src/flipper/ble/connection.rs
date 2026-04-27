@@ -7,7 +7,7 @@ use std::sync::Arc;
 use btleplug::api::{Central, CentralEvent, CharPropFlags, Characteristic, Peripheral as _};
 use btleplug::platform::Peripheral;
 use futures::StreamExt;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
 use crate::error::{FlipperError, Result};
@@ -281,5 +281,23 @@ async fn run_notification_task(
     // Best-effort teardown — ignore errors, the peer may already be gone.
     let _ = peripheral.disconnect().await;
     rx.close(reason.clone());
+
+    // Drop the client out of AppState so subsequent commands surface
+    // `NotConnected` immediately instead of trying to read from a closed
+    // RxBuffer (which would otherwise look like a transport error and trigger
+    // teardown logic in random call sites). Doing it here means the disconnect
+    // is a single, well-defined event regardless of who notices first.
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        if let Ok(mut guard) = state.client.lock() {
+            *guard = None;
+        }
+        state
+            .screen_stream_active
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut tx_slot) = state.input_event_tx.lock() {
+            *tx_slot = None;
+        }
+    }
+
     let _ = app.emit("flipper-disconnected", reason);
 }

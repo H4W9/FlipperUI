@@ -25,8 +25,15 @@ const GIF_PALETTE: [number, number, number][] = [
 
 // InputKey enum values from Flipper protobuf
 const KEY_UP = 0, KEY_DOWN = 1, KEY_RIGHT = 2, KEY_LEFT = 3, KEY_OK = 4, KEY_BACK = 5;
+const INPUT_PRESS = 0;
+const INPUT_RELEASE = 1;
 const INPUT_SHORT = 2;
 const INPUT_LONG = 3;
+
+// Long-press threshold: Flipper firmware fires LONG after ~300 ms of hold.
+// We use a slightly higher value so a quick tap can't accidentally trigger it
+// across browser keyboard-repeat startup latency.
+const LONG_PRESS_MS = 350;
 
 // Cap for the input wait-list. Mashing keys or holding auto-repeat past this
 // depth drops the extra events instead of letting a multi-second backlog build
@@ -208,6 +215,11 @@ export function ScreenViewer() {
 
   // Global keyboard shortcuts while the viewer is open, without requiring focus.
   // Skip if the user is typing in an input (e.g. the CLI) so text entry wins.
+  //
+  // Press lifecycle: keydown sends PRESS, sets a LONG_PRESS_MS timer that emits
+  // LONG if the key is still held; keyup cancels the timer (sends SHORT if the
+  // long timer hadn't fired yet) and sends RELEASE. Browser auto-repeat is
+  // ignored — a held key is one continuous press, not a stream of taps.
   useEffect(() => {
     if (!connected) return;
     const keyMap: Record<string, number> = {
@@ -215,21 +227,73 @@ export function ScreenViewer() {
       ArrowLeft: KEY_LEFT, ArrowRight: KEY_RIGHT,
       Enter: KEY_OK, Backspace: KEY_BACK,
     };
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
-      }
-      const key = keyMap[e.key];
-      if (key === undefined) return;
-      e.preventDefault();
-      // Browser auto-repeat (key held down) maps to a Flipper LONG press —
-      // otherwise a held key would just stutter the same SHORT tap.
-      enqueueInput(key, e.repeat ? INPUT_LONG : INPUT_SHORT);
+    type HeldKey = { fkey: number; longTimer: number | null; longSent: boolean };
+    const held = new Map<string, HeldKey>();
+
+    const isTextTarget = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTextTarget(e.target)) return;
+      const fkey = keyMap[e.key];
+      if (fkey === undefined) return;
+      e.preventDefault();
+      if (e.repeat) return; // hold = one press, not many
+      if (held.has(e.key)) return;
+
+      enqueueInput(fkey, INPUT_PRESS);
+      const entry: HeldKey = { fkey, longTimer: null, longSent: false };
+      entry.longTimer = window.setTimeout(() => {
+        entry.longSent = true;
+        entry.longTimer = null;
+        enqueueInput(fkey, INPUT_LONG);
+      }, LONG_PRESS_MS);
+      held.set(e.key, entry);
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      const entry = held.get(e.key);
+      if (!entry) return;
+      held.delete(e.key);
+      if (entry.longTimer != null) {
+        window.clearTimeout(entry.longTimer);
+        // Quick tap — fire SHORT before RELEASE so apps that key off SHORT
+        // (e.g. menu select) react. Both PRESS and RELEASE were already / will
+        // be sent, so this matches the SHORT triplet but with realistic timing.
+        enqueueInput(entry.fkey, INPUT_SHORT);
+      }
+      enqueueInput(entry.fkey, INPUT_RELEASE);
+    };
+
+    // Window blur fires when the user alt-tabs while holding a key. Without
+    // this we'd never see keyup and the device would keep the key held down.
+    const onBlur = () => {
+      for (const [, entry] of held) {
+        if (entry.longTimer != null) window.clearTimeout(entry.longTimer);
+        enqueueInput(entry.fkey, INPUT_RELEASE);
+      }
+      held.clear();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      // Releasing held keys on unmount avoids leaving the device in a
+      // "key down" state if the user navigates away mid-hold.
+      for (const [, entry] of held) {
+        if (entry.longTimer != null) window.clearTimeout(entry.longTimer);
+        enqueueInput(entry.fkey, INPUT_RELEASE);
+      }
+      held.clear();
+    };
   }, [connected, enqueueInput]);
 
   const width = SCREEN_W * scale;

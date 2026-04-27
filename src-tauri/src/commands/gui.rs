@@ -138,8 +138,12 @@ pub fn screen_stream_stop(state: State<AppState>) -> Result<()> {
     Ok(())
 }
 
-/// A SHORT tap expands to PRESS → SHORT → RELEASE, the same triplet qFlipper
-/// sends. Many apps only listen for PRESS/RELEASE so a bare SHORT gets ignored.
+/// A SHORT tap expands to PRESS → SHORT → RELEASE — the triplet qFlipper
+/// sends. Many apps only listen for PRESS/RELEASE so a bare SHORT gets
+/// ignored. LONG holds are *not* expanded here because the firmware's
+/// long-press threshold is ~300 ms, longer than three back-to-back wire
+/// writes; the frontend drives PRESS / LONG / RELEASE on the actual key
+/// lifecycle so the hold registers as a real long press.
 fn write_input(client: &mut FlipperClient, key: i32, input_type: i32) -> Result<()> {
     if input_type == SHORT {
         gui::send_input_event(client, key, PRESS)?;
