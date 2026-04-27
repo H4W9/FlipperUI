@@ -369,8 +369,9 @@ export function ScreenViewer() {
                 height,
                 imageRendering: "pixelated",
                 opacity: connected ? 1 : 0.15,
+                border: "5px solid #FF8300",
               }}
-              className="border border-flipper/30 rounded"
+              className="rounded"
             />
           </div>
         )}
