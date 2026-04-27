@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::flipper::client::FlipperClient;
-use crate::flipper::framing::{read_message, write_message};
+use crate::flipper::framing::{read_response, write_message};
 use crate::flipper::session::check_response;
 use crate::pb;
 use crate::pb::main::Content;
@@ -23,7 +23,7 @@ pub fn app_start(client: &mut FlipperClient, name: &str, args: &str) -> Result<(
         })),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -38,7 +38,7 @@ pub fn app_exit(client: &mut FlipperClient) -> Result<()> {
         content: Some(Content::AppExitRequest(pb_app::AppExitRequest {})),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -56,7 +56,7 @@ pub fn app_load_file(client: &mut FlipperClient, path: &str) -> Result<()> {
         })),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -77,7 +77,7 @@ pub fn app_button_press(client: &mut FlipperClient, args: &str) -> Result<()> {
         )),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -94,7 +94,7 @@ pub fn app_button_release(client: &mut FlipperClient) -> Result<()> {
         )),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }

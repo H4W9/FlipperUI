@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
-use crate::flipper::framing::{read_message, write_message};
+use crate::flipper::framing::{read_response, write_message};
 use crate::flipper::transport::SerialTransport;
 use crate::flipper::{SERIAL_TIMEOUT_DRAIN, SERIAL_TIMEOUT_NORMAL};
 use crate::pb;
@@ -68,7 +68,7 @@ pub fn ping(client: &mut FlipperClient) -> Result<()> {
         })),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }
@@ -88,7 +88,7 @@ pub fn get_device_info(client: &mut FlipperClient) -> Result<HashMap<String, Str
 
     let mut info = HashMap::new();
     loop {
-        let msg = read_message(&mut *client.transport)?;
+        let msg = read_response(&mut *client.transport)?;
         check_response(&msg, id)?;
         if let Some(Content::SystemDeviceInfoResponse(r)) = msg.content {
             info.insert(r.key, r.value);
@@ -116,7 +116,7 @@ pub fn get_power_info(client: &mut FlipperClient) -> Result<HashMap<String, Stri
 
     let mut info = HashMap::new();
     loop {
-        let msg = read_message(&mut *client.transport)?;
+        let msg = read_response(&mut *client.transport)?;
         check_response(&msg, id)?;
         if let Some(Content::SystemPowerInfoResponse(r)) = msg.content {
             info.insert(r.key, r.value);

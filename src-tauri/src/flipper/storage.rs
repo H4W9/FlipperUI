@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
-use crate::flipper::framing::{read_message, write_message};
+use crate::flipper::framing::{read_response, write_message};
 use crate::flipper::session::check_response;
 use crate::pb;
 use crate::pb::main::Content;
@@ -21,7 +21,7 @@ fn send_single(client: &mut FlipperClient, content: Content) -> Result<pb::Main>
         content: Some(content),
     };
     write_message(&mut *client.transport, &req)?;
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(resp)
 }
@@ -43,7 +43,7 @@ pub fn storage_list(client: &mut FlipperClient, path: &str) -> Result<Vec<pb_sto
 
     let mut files = Vec::new();
     loop {
-        let msg = read_message(&mut *client.transport)?;
+        let msg = read_response(&mut *client.transport)?;
         check_response(&msg, id)?;
         if let Some(Content::StorageListResponse(r)) = msg.content {
             files.extend(r.file);
@@ -104,7 +104,7 @@ where
         if cancelled.load(Ordering::Relaxed) {
             // Drain remaining response frames so the protocol stays in sync
             loop {
-                let drain = read_message(&mut *client.transport)?;
+                let drain = read_response(&mut *client.transport)?;
                 if !drain.has_next {
                     break;
                 }
@@ -112,7 +112,7 @@ where
             return Err(FlipperError::TransferCancelled);
         }
 
-        let msg = read_message(&mut *client.transport)?;
+        let msg = read_response(&mut *client.transport)?;
         check_response(&msg, id)?;
         match msg.content {
             Some(Content::StorageReadResponse(r)) => {
@@ -177,7 +177,7 @@ where
                 })),
             };
             write_message(&mut *client.transport, &abort_frame)?;
-            let _ = read_message(&mut *client.transport); // read the response
+            let _ = read_response(&mut *client.transport); // read the response
                                                           // Delete the incomplete file
             let _ = storage_delete(client, path, false);
             return Err(FlipperError::TransferCancelled);
@@ -204,7 +204,7 @@ where
     }
 
     // Device responds once with Empty after receiving all chunks
-    let resp = read_message(&mut *client.transport)?;
+    let resp = read_response(&mut *client.transport)?;
     check_response(&resp, id)?;
     Ok(())
 }

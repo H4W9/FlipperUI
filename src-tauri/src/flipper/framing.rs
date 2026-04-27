@@ -4,6 +4,7 @@ use crate::error::{FlipperError, Result};
 use crate::flipper::diag;
 use crate::flipper::transport::Transport;
 use crate::pb;
+use crate::pb::main::Content;
 
 /// Read a protobuf-style varint from the transport.
 ///
@@ -90,6 +91,32 @@ pub fn read_message(t: &mut dyn Transport) -> Result<pb::Main> {
     let msg = pb::Main::decode(buf.as_slice())?;
     diag::log(diag::Direction::Rx, &msg, len as usize);
     Ok(msg)
+}
+
+/// Read the next RPC response, silently discarding any unsolicited screen-stream
+/// frames that may be sitting in the rx buffer.
+///
+/// This exists because BLE (and to a lesser extent USB) shares one transport
+/// between the screen-stream reader and any other RPC command. While
+/// `screen_stream_start` is active, the firmware emits `GuiScreenFrame` messages
+/// continuously; if a periodic command (ping, power_info, …) writes its
+/// request and then calls `read_message`, the next bytes off the wire are
+/// frequently a screen frame the reader thread didn't get to first. Treating
+/// that frame as a "wrong command_id" response made `with_client` tear down the
+/// session and silently kill the screen reader. Skipping the frame here keeps
+/// both consumers happy at the cost of dropping a single frame per racing call.
+///
+/// This is the helper every RPC command path should use; the screen reader
+/// itself keeps calling `read_message` directly because it actually wants
+/// frames.
+pub fn read_response(t: &mut dyn Transport) -> Result<pb::Main> {
+    loop {
+        let msg = read_message(t)?;
+        if matches!(msg.content, Some(Content::GuiScreenFrame(_))) {
+            continue;
+        }
+        return Ok(msg);
+    }
 }
 
 /// Write one `PB.Main` message to the transport with a varint length prefix.

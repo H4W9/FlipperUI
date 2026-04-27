@@ -182,6 +182,7 @@ fn screen_reader_loop(
         if !pending.is_empty() {
             let mut guard = client_mutex.lock().unwrap();
             let Some(client) = guard.as_mut() else {
+                fatal = Some("client was torn down by another command".into());
                 break 'outer;
             };
             for (key, input_type) in pending {
@@ -197,6 +198,10 @@ fn screen_reader_loop(
         let frame = {
             let mut guard = client_mutex.lock().unwrap();
             let Some(client) = guard.as_mut() else {
+                // Another path (typically `with_client` after an RPC error)
+                // tore down the client while we were between iterations. Log
+                // it so the disconnect isn't a silent mystery.
+                fatal = Some("client was torn down by another command".into());
                 break 'outer;
             };
             match read_message(&mut *client.transport) {
