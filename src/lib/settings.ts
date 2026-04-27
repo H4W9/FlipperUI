@@ -47,6 +47,10 @@ export interface AppSettings {
     transport: "usb" | "ble";
     /** Last-used USB serial port path. Restored on app launch when present. */
     lastPort: string | null;
+    /** Last-connected BLE peripheral id. Used as the auto-reconnect target. */
+    lastBleId: string | null;
+    /** Display name for the last-connected BLE peripheral. */
+    lastBleName: string | null;
   };
 }
 
@@ -58,7 +62,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
-  connection: { transport: "usb", lastPort: null },
+  connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null },
 };
 
 export type SettingsPatch = {
@@ -87,6 +91,8 @@ export type SettingsPatch = {
   connection?: {
     transport?: "usb" | "ble";
     lastPort?: string | null;
+    lastBleId?: string | null;
+    lastBleName?: string | null;
   };
 };
 
@@ -140,6 +146,14 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
         patch.connection?.lastPort !== undefined
           ? patch.connection.lastPort
           : current.connection.lastPort,
+      lastBleId:
+        patch.connection?.lastBleId !== undefined
+          ? patch.connection.lastBleId
+          : current.connection.lastBleId,
+      lastBleName:
+        patch.connection?.lastBleName !== undefined
+          ? patch.connection.lastBleName
+          : current.connection.lastBleName,
     },
   };
   await store.set(STORE_KEY, next);
@@ -191,6 +205,10 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
         raw.connection?.transport ?? DEFAULT_SETTINGS.connection.transport,
       lastPort:
         raw.connection?.lastPort ?? DEFAULT_SETTINGS.connection.lastPort,
+      lastBleId:
+        raw.connection?.lastBleId ?? DEFAULT_SETTINGS.connection.lastBleId,
+      lastBleName:
+        raw.connection?.lastBleName ?? DEFAULT_SETTINGS.connection.lastBleName,
     },
   };
 }

@@ -9,6 +9,7 @@ import {
 } from "../../lib/tauri";
 import { Spinner } from "../ui/Spinner";
 import { useFlipperStore } from "../../store/useFlipperStore";
+import { updateSettings } from "../../lib/settings";
 
 interface BleDialogProps {
   onClose: () => void;
@@ -124,6 +125,11 @@ export function BleDialog({ onClose }: BleDialogProps) {
     try {
       const info = await connectBleDevice(device.id, device.name);
       setConnected(info, "ble");
+      // Remember this peripheral so the auto-reconnect path in DevicePanel
+      // can re-pair if the BLE link drops without an explicit disconnect.
+      void updateSettings({
+        connection: { lastBleId: device.id, lastBleName: device.name },
+      }).catch(() => {});
       onClose();
     } catch (e) {
       const msg = String(e);
