@@ -15,10 +15,12 @@ const PRESS: i32 = 0;
 const RELEASE: i32 = 1;
 const SHORT: i32 = 2;
 
-/// Bound per reader-loop iteration so a burst of input events can't starve
-/// the read side. 16 events is ~5 keyboard auto-repeats worth, far more than
-/// the Flipper processes within one frame interval anyway.
-const MAX_INPUTS_PER_ITER: usize = 16;
+/// Bound per reader-loop iteration. We process exactly one event between
+/// frame reads so a burst of inputs can't open a long write-only window —
+/// on BLE that window was enough to corrupt framing and kill the stream.
+/// The frontend enforces its own short wait-list so dropped events here are
+/// rare; serializing strictly at the boundary keeps reads and writes paced.
+const MAX_INPUTS_PER_ITER: usize = 1;
 
 /// Start the screen stream. Spawns a background thread that reads frames
 /// and emits them as `"screen-frame"` events (base64-encoded RGBA, 128x64).

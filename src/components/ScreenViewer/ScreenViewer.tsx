@@ -26,6 +26,12 @@ const GIF_PALETTE: [number, number, number][] = [
 // InputKey enum values from Flipper protobuf
 const KEY_UP = 0, KEY_DOWN = 1, KEY_RIGHT = 2, KEY_LEFT = 3, KEY_OK = 4, KEY_BACK = 5;
 const INPUT_SHORT = 2;
+const INPUT_LONG = 3;
+
+// Cap for the input wait-list. Mashing keys or holding auto-repeat past this
+// depth drops the extra events instead of letting a multi-second backlog build
+// up — the device would still be replaying old presses long after you let go.
+const MAX_PENDING_INPUTS = 8;
 
 function formatElapsed(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -178,9 +184,27 @@ export function ScreenViewer() {
     };
   }, []);
 
-  const press = useCallback((key: number) => {
-    sendInputEvent(key, INPUT_SHORT).catch(() => {});
+  // Serial wait-list for input events. Each call chains onto the previous so
+  // only one `sendInputEvent` is in flight at a time — rapid clicks or held
+  // keys won't flood the backend channel and starve the screen-stream reader
+  // (which used to break BLE framing under input bursts).
+  const inputChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingInputsRef = useRef(0);
+
+  const enqueueInput = useCallback((key: number, inputType: number) => {
+    if (pendingInputsRef.current >= MAX_PENDING_INPUTS) return;
+    pendingInputsRef.current += 1;
+    inputChainRef.current = inputChainRef.current
+      .then(() => sendInputEvent(key, inputType))
+      .catch(() => {})
+      .finally(() => {
+        pendingInputsRef.current -= 1;
+      });
   }, []);
+
+  const press = useCallback((key: number) => {
+    enqueueInput(key, INPUT_SHORT);
+  }, [enqueueInput]);
 
   // Global keyboard shortcuts while the viewer is open, without requiring focus.
   // Skip if the user is typing in an input (e.g. the CLI) so text entry wins.
@@ -200,11 +224,13 @@ export function ScreenViewer() {
       const key = keyMap[e.key];
       if (key === undefined) return;
       e.preventDefault();
-      press(key);
+      // Browser auto-repeat (key held down) maps to a Flipper LONG press —
+      // otherwise a held key would just stutter the same SHORT tap.
+      enqueueInput(key, e.repeat ? INPUT_LONG : INPUT_SHORT);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [connected, press]);
+  }, [connected, enqueueInput]);
 
   const width = SCREEN_W * scale;
   const height = SCREEN_H * scale;
