@@ -29,22 +29,17 @@ TODO - OPEN
 ______________________________
 
 --- META ---
-[ ] brainstorm UI redesign - simplify where possible without losing usability. evaluate: nav rail density, progress feedback patterns, library row actions, global-search placement, overall information density
 
 --- FIXES / IMPROVEMENTS ---
 [ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens
-[ ] persist transport choice + last-used port in settings so reopening the app doesn't reset to USB every time
 [ ] live screen viewer thumbnail in the dashboard - tiny preview of the Flipper screen so you don't have to open the full overlay just to see what's on the device
-[ ] filter/remove path from the name of the flipper in the serial-connection select - on macOS it's the "/dev/" we could at least remove
-[ ] open flyout-menu on tray-icon click - showing basic info like battery percentage etc and shortcuts to open the dashboard and other functions of the app
 
 --- ASSETS ---
 
 --- NEW FEATURES ---
-[ ] add notifications for Scans finished etc.
+[ ] add notifications for Library-Scans finished etc.
 [ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
-[ ] add BadUSB Library (same as with infrared/nfc/subghz) - shows a list like all the other librarys, with cache and everything. should show BadUSB and BadKB files. with file-preview
 [ ] add RFID Library - same as NFC-Library but showing all 125khZ RFID files etc.
 [ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this)
 [ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter
@@ -52,9 +47,7 @@ ______________________________
 [ ] drag-drop export from library rows to Finder - reuse @crabnebula/tauri-plugin-drag already wired in File Browser
 [ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query. needs a design pass to check it doesn't crowd the header; may need to test a few placements before committing
 [ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON so users can transplant their library index between machines without re-scanning
-[ ] BLE keep-scanning / live-discovery mode - devices appear as they're discovered (AirDrop-style) instead of a fixed-window snapshot; user stops the scan manually
 [ ] cache script / signal text in library caches - currently entries store metadata only; storing the file body (or first N KB) would let BadUSB / SubGhz / IR / NFC previews work fully offline
-[ ] Device-Settings schema awareness - replace the generic per-line key=value editor with typed editors per known file (dropdowns for keybind keys/types/actions, file picker for .fap paths, enum pickers for momentum_settings keys, etc.)
 
 --- SUBGHZ ---
 [ ] subghz library cache + background re-scan - persist scanned entries via tauri-plugin-store keyed by device UID, render cache instantly on view open, only re-read files whose mtime changed
@@ -131,7 +124,13 @@ ______________________________
 [x] shared library-scan backend helper - commands/library_scan.rs::run_library_scan<E,F> owns validate_root + mode check + client lock + cached_map + progress-emit; subghz/infrared/nfc/badusb commands collapsed to ~25 lines each
 [x] fix screen sharing over BLE - root cause was non-transactional read_varint: 100ms screen-stream timeout firing mid-varint popped a byte from the BLE RxBuffer and dropped it on the floor, desyncing framing into "Protobuf decode error: invalid tag value 0". Fixed by adding Transport::unread + a pushback buffer in BleTransport/SerialTransport and making read_varint/read_message roll back consumed bytes on timeout
 [x] source Flipper Zero product PNGs for the black + transparent color variants (put them in src/assets/flipper-zero/black.png and transparent.png). currently only the white/orange variant is shipped — it's used as a placeholder for all three hardware_color values
-[ ] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)
+[x] fix DeviceInfoView.tsx:211 TS2345 - `string | null` passed where `string` is expected (pre-existing type error)
 [x] File Manager -> SD/Internal storage toggle above the file explorer (HardDrive ↔ Cpu icons, mirrors USB/BLE switch style); flipping resets path to /ext or /int
 [x] Tray Icon - monochrome option in Settings → System; bundled tray-monochrome.png (template image on macOS for menubar tinting); persisted in tray.monochromeIcon and re-applied on startup + after re-enabling tray
 [x] Dashboard library counts pre-load — usePreloadLibraries hook hydrates all 5 library caches (subghz/ir/nfc/badusb/apps) from disk on deviceUid change, so the Dashboard tiles show real counts immediately instead of 0 until each library view is opened
+[x] Device-Settings schema awareness — schemas.ts registry; .desktop_keybinds.txt → key/press dropdowns + .fap picker, .mainmenu_apps.txt → path field + .fap picker, .momentum_settings.txt → bool toggles for known boolean keys; falls back to generic kv editor for unknown files/lines
+[x] add BadUSB Library (same as with infrared/nfc/subghz) - shows a list like all the other librarys, with cache and everything. should show BadUSB and BadKB files. with file-preview
+[x] persist transport choice + last-used port in settings so reopening the app doesn't reset to USB every time — added connection.{transport,lastPort} to AppSettings; DevicePanel hydrates on mount, persists on toggle/dropdown change
+[x] tray flyout menu on click - device name + firmware + battery%/charging header, nav shortcuts (Dashboard / File Explorer / Sub-GHz / Infrared / NFC / BadUSB / Apps / Settings), Show/Hide/Quit. left-click opens menu (was: toggle window — moved to middle-click). frontend pushes status via update_tray_status; menu items emit "tray-nav" event handled in App.tsx
+[x] strip /dev/ prefix from port labels in the DevicePanel port selector — display only (value still uses full path so the backend connect call is unchanged)
+[x] BLE keep-scanning / live-discovery mode — added start_ble_scan/stop_ble_scan Tauri commands that pump a btleplug events stream and emit "ble-scan-device" events as Flipper peripherals are seen (DeviceDiscovered + DeviceUpdated, plus replay of cached peripherals). BleDialog now subscribes to the live events, dedupes by id (merging RSSI/paired updates), and runs until the user clicks Stop or closes the dialog. AppState gained a ble_scan_active AtomicBool guarding against double-starts.

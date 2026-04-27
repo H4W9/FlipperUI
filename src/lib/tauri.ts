@@ -39,9 +39,22 @@ export interface BleDevice {
   paired: boolean;
 }
 
-/** Discover Flipper devices over BLE. Runs a ~1.8s scan. */
+/** Discover Flipper devices over BLE. Runs a fixed ~10s scan. */
 export const listBleDevices = (): Promise<BleDevice[]> =>
   invoke<BleDevice[]>("list_ble_devices");
+
+/**
+ * Start a live BLE discovery scan. Emits `ble-scan-device` Tauri events
+ * (payload: {@link BleDevice}) as peripherals appear or update, and a
+ * `ble-scan-stopped` event when the scan ends. Idempotent — calling while a
+ * scan is already running has no effect.
+ */
+export const startBleScan = (): Promise<void> =>
+  invoke<void>("start_ble_scan");
+
+/** Stop a live scan started with {@link startBleScan}. Idempotent. */
+export const stopBleScan = (): Promise<void> =>
+  invoke<void>("stop_ble_scan");
 
 /** Connect to a Flipper over BLE using an id from {@link listBleDevices}. */
 export const connectBleDevice = (id: string, name?: string): Promise<DeviceInfo> =>

@@ -46,6 +46,11 @@ pub struct AppState {
     /// connection is BLE). Sending on it unblocks the task so it can disconnect
     /// the peripheral cleanly. `None` for serial connections.
     pub ble_cancel_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    /// Live BLE discovery scan flag — set true while a `start_ble_scan` task is
+    /// pumping events; cleared by `stop_ble_scan` (or the task itself when it
+    /// exits). Doubles as a "scan running" guard so a second start_ble_scan is a
+    /// no-op instead of starting two competing scans on the same adapter.
+    pub ble_scan_active: Arc<AtomicBool>,
 }
 
 impl Default for AppState {
@@ -69,6 +74,7 @@ impl AppState {
             badusb_scan_cancelled: Arc::new(AtomicBool::new(false)),
             input_event_tx: Arc::new(Mutex::new(None)),
             ble_cancel_tx: Arc::new(Mutex::new(None)),
+            ble_scan_active: Arc::new(AtomicBool::new(false)),
         }
     }
 }

@@ -4,10 +4,14 @@
 //! UUID or a `"Flipper "` name prefix, and returns a list of discoverable entries
 //! tagged with RSSI and a best-effort `paired` flag derived from cached services.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use btleplug::api::{Central, CentralEvent, Peripheral as _, ScanFilter};
+use btleplug::platform::PeripheralId;
 use futures::StreamExt;
+use tauri::{AppHandle, Emitter};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::ble::{
@@ -131,4 +135,99 @@ pub async fn list_ble_devices() -> Result<Vec<BleDevice>> {
 /// Blocking wrapper — safe to call from `spawn_blocking` contexts.
 pub fn list_ble_devices_blocking() -> Result<Vec<BleDevice>> {
     BLE_RT.block_on(list_ble_devices())
+}
+
+/// Inspect a single peripheral and emit a `ble-scan-device` event if it looks
+/// like a Flipper. Returns silently for non-matches and error cases — the live
+/// scan loop should never bail on a single peripheral hiccup.
+async fn maybe_emit_peripheral(
+    adapter: &btleplug::platform::Adapter,
+    id: &PeripheralId,
+    app: &AppHandle,
+) {
+    let Ok(p) = adapter.peripheral(id).await else {
+        return;
+    };
+    let Ok(Some(props)) = p.properties().await else {
+        return;
+    };
+
+    let name = props.local_name.clone().unwrap_or_default();
+    let matches_advertised = props.services.contains(&ADVERTISED_SERVICE);
+    let matches_serial = props.services.contains(&SERIAL_SERVICE);
+    let name_looks_like_flipper = name.to_lowercase().contains("flipper");
+    if !matches_advertised && !matches_serial && !name_looks_like_flipper {
+        return;
+    }
+
+    let device = BleDevice {
+        id: p.id().to_string(),
+        name: if name.is_empty() {
+            "Flipper (unknown)".into()
+        } else {
+            name
+        },
+        rssi: props.rssi,
+        paired: matches_serial,
+    };
+    let _ = app.emit("ble-scan-device", &device);
+}
+
+/// Run a live BLE scan that emits `ble-scan-device` Tauri events as Flipper
+/// peripherals are discovered or updated, and stops only when `cancel` flips to
+/// false. Emits `ble-scan-stopped` when the loop exits.
+///
+/// Both `DeviceDiscovered` and `DeviceUpdated` events are forwarded so RSSI
+/// values refresh while the dialog is open — the frontend dedupes by `id`.
+pub async fn live_scan(app: AppHandle, cancel: Arc<AtomicBool>) -> Result<()> {
+    // Always clear the running flag and notify the UI the scan has ended,
+    // regardless of which exit path is taken below.
+    let result = (async {
+        let Ok(adapter) = shared_adapter().await else {
+            // No adapter — emit nothing, the dialog will show an empty list.
+            return Ok::<(), FlipperError>(());
+        };
+
+        let mut events = adapter.events().await.map_err(map_btle_err)?;
+        adapter
+            .start_scan(ScanFilter::default())
+            .await
+            .map_err(map_btle_err)?;
+
+        // Replay any peripherals btleplug already cached so users with bonded
+        // devices see them instantly instead of waiting for the next adv packet.
+        if let Ok(cached) = adapter.peripherals().await {
+            for p in cached {
+                maybe_emit_peripheral(&adapter, &p.id(), &app).await;
+            }
+        }
+
+        // Pump events until cancellation. The 250 ms timeout bounds how long
+        // we can sit blocked when the device is silent — the cancel flag is
+        // checked between every wakeup.
+        while cancel.load(Ordering::Relaxed) {
+            match tokio::time::timeout(Duration::from_millis(250), events.next()).await {
+                Ok(Some(CentralEvent::DeviceDiscovered(id)))
+                | Ok(Some(CentralEvent::DeviceUpdated(id))) => {
+                    maybe_emit_peripheral(&adapter, &id, &app).await;
+                }
+                Ok(Some(_)) => {} // ignore connect/disconnect/services events
+                Ok(None) => break,
+                Err(_) => continue, // timeout — recheck cancel
+            }
+        }
+
+        let _ = adapter.stop_scan().await;
+        Ok(())
+    })
+    .await;
+
+    cancel.store(false, Ordering::Relaxed);
+    let _ = app.emit("ble-scan-stopped", ());
+    result
+}
+
+/// Blocking wrapper for `live_scan`. Safe to call from `spawn_blocking`.
+pub fn live_scan_blocking(app: AppHandle, cancel: Arc<AtomicBool>) -> Result<()> {
+    BLE_RT.block_on(live_scan(app, cancel))
 }

@@ -42,6 +42,12 @@ export interface AppSettings {
      * the menubar's foreground color (template image on macOS). */
     monochromeIcon: boolean;
   };
+  connection: {
+    /** Last-used transport. Restored on app launch. */
+    transport: "usb" | "ble";
+    /** Last-used USB serial port path. Restored on app launch when present. */
+    lastPort: string | null;
+  };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -52,6 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
+  connection: { transport: "usb", lastPort: null },
 };
 
 export type SettingsPatch = {
@@ -76,6 +83,10 @@ export type SettingsPatch = {
     enabled?: boolean;
     hideDockIcon?: boolean;
     monochromeIcon?: boolean;
+  };
+  connection?: {
+    transport?: "usb" | "ble";
+    lastPort?: string | null;
   };
 };
 
@@ -123,6 +134,13 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
       monochromeIcon:
         patch.tray?.monochromeIcon ?? current.tray.monochromeIcon,
     },
+    connection: {
+      transport: patch.connection?.transport ?? current.connection.transport,
+      lastPort:
+        patch.connection?.lastPort !== undefined
+          ? patch.connection.lastPort
+          : current.connection.lastPort,
+    },
   };
   await store.set(STORE_KEY, next);
   cached = next;
@@ -167,6 +185,12 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
         raw.tray?.hideDockIcon ?? DEFAULT_SETTINGS.tray.hideDockIcon,
       monochromeIcon:
         raw.tray?.monochromeIcon ?? DEFAULT_SETTINGS.tray.monochromeIcon,
+    },
+    connection: {
+      transport:
+        raw.connection?.transport ?? DEFAULT_SETTINGS.connection.transport,
+      lastPort:
+        raw.connection?.lastPort ?? DEFAULT_SETTINGS.connection.lastPort,
     },
   };
 }

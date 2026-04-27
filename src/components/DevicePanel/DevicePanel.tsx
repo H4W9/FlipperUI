@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Usb, Power, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Zap, HardDrive, Bluetooth, Signal, SignalLow, SignalMedium, SignalHigh } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
+import { loadSettings, updateSettings } from "../../lib/settings";
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { BleDialog } from "./BleDialog";
@@ -39,9 +41,45 @@ export function DevicePanel() {
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
   const [showBleDialog, setShowBleDialog] = useState(false);
   const [transport, setTransport] = useState<"usb" | "ble">("usb");
+  // Hydrate transport + last-used port from persisted settings on first mount.
+  // Until this resolves, settings-driven port auto-select is suppressed so the
+  // poll loop can't snap to an arbitrary first port before we know the
+  // preferred one.
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSettings()
+      .then((s) => {
+        if (cancelled) return;
+        setTransport(s.connection.transport);
+        if (s.connection.lastPort) {
+          const state = useFlipperStore.getState();
+          if (!state.selectedPort) setSelectedPort(s.connection.lastPort);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSettingsHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setSelectedPort]);
+
+  const handleTransportChange = (next: "usb" | "ble") => {
+    setTransport(next);
+    void updateSettings({ connection: { transport: next } }).catch(() => {});
+  };
+
+  const handleSelectPort = (port: string | null) => {
+    setSelectedPort(port);
+    void updateSettings({ connection: { lastPort: port } }).catch(() => {});
+  };
 
   // Poll for port changes every 2 seconds + auto-connect
   useEffect(() => {
+    if (!settingsHydrated) return;
     const poll = async () => {
       try {
         const p = await listPorts();
@@ -50,7 +88,10 @@ export function DevicePanel() {
         const state = useFlipperStore.getState();
         const flipper = p.find((x) => x.is_flipper);
 
-        // Auto-select first Flipper port if none selected
+        // Auto-select first Flipper port if none selected. The persisted
+        // lastPort has already been applied in the hydrate effect, so if
+        // selectedPort is still null at this point either there was no stored
+        // port or the stored port isn't currently present.
         if (!state.selectedPort && flipper) {
           setSelectedPort(flipper.name);
         }
@@ -99,7 +140,7 @@ export function DevicePanel() {
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected, transport]);
+  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected, transport, settingsHydrated]);
 
   // Fetch power + storage info after connection
   useEffect(() => {
@@ -133,6 +174,25 @@ export function DevicePanel() {
     const id = setInterval(fetchInfo, 30000); // refresh every 30s
     return () => clearInterval(id);
   }, [isConnected]);
+
+  // Mirror device state into the system-tray flyout menu so users see
+  // connection status + battery without opening the window. The tray rebuilds
+  // its menu on every push, so we only call when one of the inputs changes.
+  useEffect(() => {
+    const charge =
+      batteryCharge != null && Number.isFinite(Number(batteryCharge))
+        ? Math.max(0, Math.min(100, Math.round(Number(batteryCharge))))
+        : null;
+    void invoke("update_tray_status", {
+      status: {
+        connected: isConnected,
+        deviceName: deviceInfo?.hardware_name ?? null,
+        firmwareVersion: deviceInfo?.firmware_version ?? null,
+        batteryCharge: charge,
+        batteryCharging,
+      },
+    }).catch(() => {});
+  }, [isConnected, deviceInfo, batteryCharge, batteryCharging]);
 
   // Poll ping latency for connection-quality indicator.
   useEffect(() => {
@@ -215,7 +275,7 @@ export function DevicePanel() {
           role="switch"
           aria-checked={transport === "ble"}
           aria-label="Toggle connection transport"
-          onClick={() => setTransport(transport === "usb" ? "ble" : "usb")}
+          onClick={() => handleTransportChange(transport === "usb" ? "ble" : "usb")}
           disabled={isConnected || isConnecting}
           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
             transport === "ble" ? "bg-accent" : "bg-elevated"
@@ -237,14 +297,14 @@ export function DevicePanel() {
       {transport === "usb" && (
         <select
           value={selectedPort ?? ""}
-          onChange={(e) => setSelectedPort(e.target.value || null)}
+          onChange={(e) => handleSelectPort(e.target.value || null)}
           disabled={isConnected || isConnecting}
           className="bg-surface text-primary text-sm border border-elevated rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-accent"
         >
           <option value="">Select port…</option>
           {ports.map((p) => (
             <option key={p.name} value={p.name}>
-              {p.name}
+              {p.name.startsWith("/dev/") ? p.name.slice(5) : p.name}
             </option>
           ))}
         </select>

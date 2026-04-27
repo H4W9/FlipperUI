@@ -117,6 +117,34 @@ pub async fn list_ble_devices() -> Result<Vec<scanner::BleDevice>> {
         .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
+/// Start a live BLE scan that emits `ble-scan-device` events as Flipper
+/// peripherals are seen, until the matching `stop_ble_scan` is called. Calling
+/// this while a scan is already running is a no-op.
+#[tauri::command]
+pub async fn start_ble_scan(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+    let cancel = Arc::clone(&state.ble_scan_active);
+    // swap returns the previous value — if true, a scan is already running and
+    // we leave it alone (the second start would be racing the first on the same
+    // adapter's event stream).
+    if cancel.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(e) = scanner::live_scan_blocking(app_handle, cancel) {
+            tracing::warn!("BLE live scan ended with error: {e}");
+        }
+    });
+    Ok(())
+}
+
+/// Stop the live BLE scan started by `start_ble_scan`. Idempotent.
+#[tauri::command]
+pub async fn stop_ble_scan(state: State<'_, AppState>) -> Result<()> {
+    state.ble_scan_active.store(false, Ordering::Relaxed);
+    Ok(())
+}
+
 /// Open a BLE connection to the Flipper Zero identified by `id` (from `list_ble_devices`).
 #[tauri::command]
 pub async fn connect_ble_device(

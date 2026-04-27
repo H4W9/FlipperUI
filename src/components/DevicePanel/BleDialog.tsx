@@ -1,6 +1,12 @@
-import { useEffect, useState } from "react";
-import { Bluetooth, RefreshCw, Signal } from "lucide-react";
-import { listBleDevices, connectBleDevice, type BleDevice } from "../../lib/tauri";
+import { useEffect, useRef, useState } from "react";
+import { Bluetooth, Signal, Square, RefreshCw } from "lucide-react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import {
+  startBleScan,
+  stopBleScan,
+  connectBleDevice,
+  type BleDevice,
+} from "../../lib/tauri";
 import { Spinner } from "../ui/Spinner";
 import { useFlipperStore } from "../../store/useFlipperStore";
 
@@ -17,6 +23,13 @@ function rssiBars(rssi: number | null): string {
   return "○○○○";
 }
 
+function sortDevices(list: BleDevice[]): BleDevice[] {
+  return [...list].sort((a, b) => {
+    if (a.paired !== b.paired) return a.paired ? -1 : 1;
+    return (b.rssi ?? -999) - (a.rssi ?? -999);
+  });
+}
+
 export function BleDialog({ onClose }: BleDialogProps) {
   const [devices, setDevices] = useState<BleDevice[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -25,30 +38,73 @@ export function BleDialog({ onClose }: BleDialogProps) {
 
   const { setConnecting, setConnected, setError: setStoreError } = useFlipperStore();
 
-  const scan = async () => {
-    setScanning(true);
+  // Holds the most recent map of devices keyed by id, so the listener can
+  // merge updates without depending on a setState closure (which would race
+  // when many ble-scan-device events fire in quick succession).
+  const devicesRef = useRef<Map<string, BleDevice>>(new Map());
+
+  const start = async () => {
     setError(null);
+    setScanning(true);
     try {
-      const result = await listBleDevices();
-      // Sort: paired first, then by RSSI (strongest signal first).
-      result.sort((a, b) => {
-        if (a.paired !== b.paired) return a.paired ? -1 : 1;
-        return (b.rssi ?? -999) - (a.rssi ?? -999);
-      });
-      setDevices(result);
+      await startBleScan();
     } catch (e) {
       setError(String(e));
-    } finally {
       setScanning(false);
     }
   };
 
-  // Scan exactly once on mount. `onClose` is an inline arrow in the parent, so
-  // depending on it here would re-run this effect (and re-scan) on every parent
-  // render — which, combined with a 2 s port poll, turns into a continuous scan
-  // loop even while a BLE session is already active.
+  const stop = async () => {
+    try {
+      await stopBleScan();
+    } catch {
+      // Ignore — backend will emit ble-scan-stopped regardless
+    }
+  };
+
+  const reset = () => {
+    devicesRef.current = new Map();
+    setDevices([]);
+  };
+
+  // Subscribe to live discovery events, kick off the scan, and tear everything
+  // down on unmount (including stopping a still-running scan).
   useEffect(() => {
-    scan();
+    let unlistenDevice: UnlistenFn | null = null;
+    let unlistenStopped: UnlistenFn | null = null;
+    let cancelled = false;
+
+    (async () => {
+      unlistenDevice = await listen<BleDevice>("ble-scan-device", (e) => {
+        const d = e.payload;
+        const map = devicesRef.current;
+        const existing = map.get(d.id);
+        // Merge so a stale "no RSSI" update doesn't blow away a fresh value.
+        const merged: BleDevice = existing
+          ? {
+              ...existing,
+              ...d,
+              rssi: d.rssi ?? existing.rssi,
+              paired: existing.paired || d.paired,
+            }
+          : d;
+        map.set(d.id, merged);
+        setDevices(sortDevices(Array.from(map.values())));
+      });
+      unlistenStopped = await listen("ble-scan-stopped", () => {
+        setScanning(false);
+      });
+
+      if (!cancelled) await start();
+    })();
+
+    return () => {
+      cancelled = true;
+      unlistenDevice?.();
+      unlistenStopped?.();
+      // Best-effort: stop the backend scan when the dialog closes.
+      void stopBleScan().catch(() => {});
+    };
   }, []);
 
   useEffect(() => {
@@ -60,6 +116,8 @@ export function BleDialog({ onClose }: BleDialogProps) {
   }, [onClose]);
 
   const handleConnect = async (device: BleDevice) => {
+    // Connecting needs exclusive use of the BLE adapter — pause discovery.
+    await stop();
     setConnectingId(device.id);
     setConnecting(true);
     setStoreError(null);
@@ -76,6 +134,12 @@ export function BleDialog({ onClose }: BleDialogProps) {
     }
   };
 
+  const handleRescan = async () => {
+    await stop();
+    reset();
+    await start();
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
@@ -90,19 +154,34 @@ export function BleDialog({ onClose }: BleDialogProps) {
             <Bluetooth size={14} className="text-accent" />
             Connect over Bluetooth
           </h3>
-          <button
-            onClick={scan}
-            disabled={scanning || connectingId !== null}
-            className="text-muted hover:text-primary disabled:opacity-40 p-1 rounded transition-colors"
-            title="Rescan"
-          >
-            {scanning ? <Spinner size={14} /> : <RefreshCw size={14} />}
-          </button>
+          {scanning ? (
+            <button
+              onClick={stop}
+              disabled={connectingId !== null}
+              className="flex items-center gap-1.5 text-xs text-secondary hover:text-primary disabled:opacity-40 px-2 py-1 rounded transition-colors"
+              title="Stop scanning"
+            >
+              <Spinner size={12} />
+              <span>Scanning…</span>
+              <Square size={11} className="ml-0.5" />
+            </button>
+          ) : (
+            <button
+              onClick={handleRescan}
+              disabled={connectingId !== null}
+              className="flex items-center gap-1.5 text-xs text-secondary hover:text-primary disabled:opacity-40 px-2 py-1 rounded transition-colors"
+              title="Rescan"
+            >
+              <RefreshCw size={12} />
+              <span>Rescan</span>
+            </button>
+          )}
         </div>
 
         <p className="text-xs text-secondary mb-3">
           Pair the Flipper in your OS Bluetooth settings first. BLE supports
-          files, screen, and apps — but not CLI.
+          files, screen, and apps — but not CLI. Devices appear as they're
+          discovered; the scan keeps running until you stop it.
         </p>
 
         {error && (
@@ -115,7 +194,7 @@ export function BleDialog({ onClose }: BleDialogProps) {
           {scanning && devices.length === 0 && (
             <div className="flex items-center gap-2 p-3 text-xs text-secondary">
               <Spinner size={13} />
-              Scanning…
+              Looking for Flippers…
             </div>
           )}
           {!scanning && devices.length === 0 && !error && (

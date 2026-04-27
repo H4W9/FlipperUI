@@ -38,13 +38,87 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// Build the menu that opens from the system-tray icon: Show/Hide window + Quit.
-fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+/// Build the tray flyout menu: device status header (when connected),
+/// navigation shortcuts to each major view, then Show/Hide/Quit. The menu is
+/// rebuilt on every status push so the battery/device fields stay live.
+pub fn build_tray_menu(
+    app: &tauri::AppHandle,
+    status: &commands::tray::TrayStatus,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let mut builder = MenuBuilder::new(app);
+
+    // Status header — disabled items used purely as informational labels.
+    if status.connected {
+        let title = match (&status.device_name, &status.firmware_version) {
+            (Some(n), Some(v)) => format!("{n}  ·  {v}"),
+            (Some(n), None) => n.clone(),
+            (None, Some(v)) => v.clone(),
+            _ => "Flipper Zero".to_string(),
+        };
+        let header = MenuItemBuilder::with_id("tray-status-device", title)
+            .enabled(false)
+            .build(app)?;
+        builder = builder.item(&header);
+
+        if let Some(charge) = status.battery_charge {
+            let bolt = if status.battery_charging { " ⚡" } else { "" };
+            let battery = MenuItemBuilder::with_id(
+                "tray-status-battery",
+                format!("Battery: {charge}%{bolt}"),
+            )
+            .enabled(false)
+            .build(app)?;
+            builder = builder.item(&battery);
+        }
+    } else {
+        let header = MenuItemBuilder::with_id("tray-status-device", "Disconnected")
+            .enabled(false)
+            .build(app)?;
+        builder = builder.item(&header);
+    }
+    builder = builder.separator();
+
+    // Navigation shortcuts. The frontend listens for "tray-nav" events and
+    // calls setActiveView with the payload. Items that require a connection
+    // (libraries) are disabled when no device is attached.
+    let nav_dashboard = MenuItemBuilder::with_id("tray-nav-dashboard", "Open Dashboard").build(app)?;
+    let nav_files = MenuItemBuilder::with_id("tray-nav-files", "File Explorer")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_subghz = MenuItemBuilder::with_id("tray-nav-subghz", "Sub-GHz Library")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_infrared = MenuItemBuilder::with_id("tray-nav-infrared", "Infrared Library")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_nfc = MenuItemBuilder::with_id("tray-nav-nfc", "NFC Library")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_badusb = MenuItemBuilder::with_id("tray-nav-badusb", "BadUSB Library")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_apps = MenuItemBuilder::with_id("tray-nav-apps", "App Library")
+        .enabled(status.connected)
+        .build(app)?;
+    let nav_settings = MenuItemBuilder::with_id("tray-nav-settings", "Settings…").build(app)?;
+    builder = builder
+        .item(&nav_dashboard)
+        .item(&nav_files)
+        .item(&nav_subghz)
+        .item(&nav_infrared)
+        .item(&nav_nfc)
+        .item(&nav_badusb)
+        .item(&nav_apps)
+        .separator()
+        .item(&nav_settings)
+        .separator();
+
     let show = MenuItemBuilder::with_id("tray-show", "Show FlipperUI").build(app)?;
     let hide = MenuItemBuilder::with_id("tray-hide", "Hide FlipperUI").build(app)?;
     let quit = MenuItemBuilder::with_id("tray-quit", "Quit FlipperUI").build(app)?;
-    MenuBuilder::new(app)
-        .items(&[&show, &hide])
+    builder
+        .item(&show)
+        .item(&hide)
         .separator()
         .item(&quit)
         .build()
@@ -105,15 +179,20 @@ fn pad_to_square(src: &tauri::image::Image<'_>, multiplier: u32) -> tauri::image
 /// path and the runtime toggle command so the click-handling behaviour stays
 /// identical.
 pub fn install_tray(app: &tauri::AppHandle, monochrome: bool) -> tauri::Result<()> {
-    let tray_menu = build_tray_menu(app)?;
+    let tray_menu = build_tray_menu(app, &commands::tray::tray_status())?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("FlipperUI")
         .icon(tray_icon_for(app, monochrome)?)
         .menu(&tray_menu)
-        .show_menu_on_left_click(false)
+        // Left-click opens the flyout menu (device status + nav shortcuts);
+        // right-click also opens it via the platform's native gesture.
+        .show_menu_on_left_click(true)
         .on_tray_icon_event(|tray, event| {
+            // Suppress the rare middle-click toggle path: the flyout menu is
+            // now the primary interaction. We only handle middle-click as a
+            // window-toggle convenience.
             if let TrayIconEvent::Click {
-                button: MouseButton::Left,
+                button: MouseButton::Middle,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
@@ -210,27 +289,42 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
-            app.on_menu_event(|app, event| match event.id().as_ref() {
-                "settings" => {
-                    let _ = app.emit("open-settings", ());
-                }
-                // Tray menu items — toggle window visibility / quit.
-                "tray-show" => {
+            app.on_menu_event(|app, event| {
+                let id = event.id().as_ref();
+                // Tray nav shortcuts: bring the window forward and emit the
+                // view name. The frontend listens for "tray-nav" and calls
+                // setActiveView.
+                if let Some(view) = id.strip_prefix("tray-nav-") {
                     if let Some(w) = app.get_webview_window("main") {
                         let _ = w.show();
                         let _ = w.set_focus();
                         let _ = w.unminimize();
                     }
+                    let _ = app.emit("tray-nav", view.to_string());
+                    return;
                 }
-                "tray-hide" => {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.hide();
+                match id {
+                    "settings" => {
+                        let _ = app.emit("open-settings", ());
                     }
+                    // Tray menu items — toggle window visibility / quit.
+                    "tray-show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                            let _ = w.unminimize();
+                        }
+                    }
+                    "tray-hide" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.hide();
+                        }
+                    }
+                    "tray-quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
                 }
-                "tray-quit" => {
-                    app.exit(0);
-                }
-                _ => {}
             });
 
             // System-tray icon. Left-click toggles the window; right-click
@@ -246,6 +340,8 @@ pub fn run() {
             commands::device::connect,
             commands::device::disconnect,
             commands::device::list_ble_devices,
+            commands::device::start_ble_scan,
+            commands::device::stop_ble_scan,
             commands::device::connect_ble_device,
             commands::device::connection_kind,
             commands::storage::storage_list,
@@ -293,6 +389,7 @@ pub fn run() {
             commands::tray::set_tray_enabled,
             commands::tray::set_dock_visible,
             commands::tray::set_tray_monochrome,
+            commands::tray::update_tray_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

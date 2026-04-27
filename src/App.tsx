@@ -87,6 +87,18 @@ export default function App() {
     return () => unlisten?.();
   }, [setActiveView]);
 
+  // Tray flyout navigation shortcuts emit "tray-nav" with the view name.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<string>("tray-nav", (event) => {
+      const view = event.payload as ActiveView;
+      setActiveView(view);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => unlisten?.();
+  }, [setActiveView]);
+
   return (
     <div className="flex h-screen bg-app text-primary overflow-hidden select-none">
       <SideRail />

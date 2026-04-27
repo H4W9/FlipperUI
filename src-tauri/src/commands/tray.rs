@@ -7,10 +7,33 @@
 //! `Accessory` (no dock icon, menubar-only style).
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
+use serde::Deserialize;
 use tauri::AppHandle;
 
-use crate::{install_tray, tray_icon_for, TRAY_ID};
+use crate::{build_tray_menu, install_tray, tray_icon_for, TRAY_ID};
+
+/// Snapshot of device-side state mirrored into the tray menu. The frontend
+/// pushes this whenever the connection state or battery changes; the tray
+/// rebuilds its menu so users can see basic info without opening the window.
+#[derive(Clone, Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayStatus {
+    pub connected: bool,
+    pub device_name: Option<String>,
+    pub firmware_version: Option<String>,
+    pub battery_charge: Option<u8>,
+    pub battery_charging: bool,
+}
+
+/// Latest pushed status, used to rebuild the menu after a tray re-install
+/// (e.g. when the user toggles tray off → on in Settings).
+static TRAY_STATUS: Mutex<Option<TrayStatus>> = Mutex::new(None);
+
+pub fn tray_status() -> TrayStatus {
+    TRAY_STATUS.lock().ok().and_then(|g| g.clone()).unwrap_or_default()
+}
 
 /// Process-wide desired state for the monochrome tray icon. Read by
 /// `install_tray` (so a re-install after `set_tray_enabled(false)` →
@@ -56,6 +79,23 @@ pub fn set_dock_visible(app: AppHandle, visible: bool) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (app, visible);
+    }
+    Ok(())
+}
+
+/// Push the latest device status into the tray. Rebuilds the tray menu so the
+/// status header (device name, battery) reflects current state. Safe to call
+/// when the tray is disabled — we cache the status and replay it on the next
+/// install.
+#[tauri::command]
+pub fn update_tray_status(app: AppHandle, status: TrayStatus) -> Result<(), String> {
+    {
+        let mut guard = TRAY_STATUS.lock().map_err(|e| e.to_string())?;
+        *guard = Some(status.clone());
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let menu = build_tray_menu(&app, &status).map_err(|e| e.to_string())?;
+        tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

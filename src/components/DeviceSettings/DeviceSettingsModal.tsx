@@ -12,6 +12,7 @@ import { reboot, storageRead, storageWrite } from "../../lib/tauri";
 import { base64ToUint8Array, uint8ArrayToBase64 } from "../../lib/encoding";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { FilePickerModal } from "../FilePickerModal/FilePickerModal";
+import { schemaFor, type Field, type FileSchema, type StructuredLine } from "./schemas";
 
 type Line =
   | { kind: "kv"; key: string; value: string }
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function DeviceSettingsModal({ path, onClose }: Props) {
+  const schema = useMemo(() => schemaFor(path), [path]);
   const [originalText, setOriginalText] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [trailingNewline, setTrailingNewline] = useState(true);
@@ -32,7 +34,13 @@ export function DeviceSettingsModal({ path, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"structured" | "raw">("structured");
   const [rawText, setRawText] = useState("");
-  const [pickerForIndex, setPickerForIndex] = useState<number | null>(null);
+  // Picker target is either a generic-row index (number) or a schema field
+  // identified by `{ idx, fieldId }`.
+  const [pickerTarget, setPickerTarget] = useState<
+    | { kind: "generic"; idx: number }
+    | { kind: "schema"; idx: number; fieldId: string }
+    | null
+  >(null);
   const [showRebootPrompt, setShowRebootPrompt] = useState(false);
 
   useEffect(() => {
@@ -63,13 +71,13 @@ export function DeviceSettingsModal({ path, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !showRebootPrompt && pickerForIndex == null) {
+      if (e.key === "Escape" && !showRebootPrompt && pickerTarget == null) {
         onClose();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, showRebootPrompt, pickerForIndex]);
+  }, [onClose, showRebootPrompt, pickerTarget]);
 
   const currentText = useMemo(() => {
     if (mode === "raw") return rawText;
@@ -85,8 +93,24 @@ export function DeviceSettingsModal({ path, onClose }: Props) {
   }, []);
 
   const addRow = useCallback(() => {
+    if (schema) {
+      const blank = schema.serializeLine(schema.newLine());
+      setLines((prev) => [...prev, lineFromText(blank)]);
+      return;
+    }
     setLines((prev) => [...prev, { kind: "kv", key: "", value: "" }]);
-  }, []);
+  }, [schema]);
+
+  // Replace a single line with the text produced by re-serializing a
+  // schema-edited row. We feed the resulting text back through the generic
+  // line parser so raw mode stays consistent with the structured view.
+  const updateLineFromSchema = useCallback(
+    (idx: number, structured: StructuredLine, s: FileSchema) => {
+      const text = s.serializeLine(structured);
+      setLines((prev) => prev.map((l, i) => (i === idx ? lineFromText(text) : l)));
+    },
+    [],
+  );
 
   const removeRow = useCallback((idx: number) => {
     setLines((prev) => prev.filter((_, i) => i !== idx));
@@ -206,20 +230,43 @@ export function DeviceSettingsModal({ path, onClose }: Props) {
               />
             ) : (
               <div className="px-3 py-2 flex flex-col gap-1.5">
+                {schema?.description && (
+                  <p className="px-1 pb-1 text-[11px] text-dim">
+                    {schema.description}
+                  </p>
+                )}
                 {lines.length === 0 ? (
                   <div className="py-6 text-center text-[11px] text-dim">
                     Empty file
                   </div>
                 ) : (
-                  lines.map((line, idx) => (
-                    <LineRow
-                      key={idx}
-                      line={line}
-                      onChange={(patch) => updateLine(idx, patch)}
-                      onRemove={() => removeRow(idx)}
-                      onPick={() => setPickerForIndex(idx)}
-                    />
-                  ))
+                  lines.map((line, idx) => {
+                    const structured = schema
+                      ? schema.parseLine(lineToText(line))
+                      : null;
+                    if (schema && structured) {
+                      return (
+                        <SchemaRow
+                          key={idx}
+                          structured={structured}
+                          onChange={(next) => updateLineFromSchema(idx, next, schema)}
+                          onRemove={() => removeRow(idx)}
+                          onPick={(fieldId) =>
+                            setPickerTarget({ kind: "schema", idx, fieldId })
+                          }
+                        />
+                      );
+                    }
+                    return (
+                      <LineRow
+                        key={idx}
+                        line={line}
+                        onChange={(patch) => updateLine(idx, patch)}
+                        onRemove={() => removeRow(idx)}
+                        onPick={() => setPickerTarget({ kind: "generic", idx })}
+                      />
+                    );
+                  })
                 )}
                 <button
                   onClick={addRow}
@@ -265,23 +312,39 @@ export function DeviceSettingsModal({ path, onClose }: Props) {
         </div>
       </div>
 
-      {pickerForIndex != null && (
+      {pickerTarget != null && (
         <FilePickerModal
           title="Pick a file"
-          initialPath="/ext/apps"
+          initialPath={pickerInitialPathFor(pickerTarget, lines, schema)}
           onPick={(picked) => {
-            const idx = pickerForIndex;
-            setLines((prev) =>
-              prev.map((line, i) => {
-                if (i !== idx) return line;
-                if (line.kind === "kv") return { ...line, value: picked };
-                if (line.kind === "raw") return { ...line, text: picked };
-                return line;
-              }),
-            );
-            setPickerForIndex(null);
+            if (pickerTarget.kind === "generic") {
+              const idx = pickerTarget.idx;
+              setLines((prev) =>
+                prev.map((line, i) => {
+                  if (i !== idx) return line;
+                  if (line.kind === "kv") return { ...line, value: picked };
+                  if (line.kind === "raw") return { ...line, text: picked };
+                  return line;
+                }),
+              );
+            } else if (schema) {
+              const { idx, fieldId } = pickerTarget;
+              const current = lines[idx];
+              if (current) {
+                const parsed = schema.parseLine(lineToText(current));
+                if (parsed) {
+                  const next: StructuredLine = {
+                    fields: parsed.fields.map((f) =>
+                      f.id === fieldId ? { ...f, value: picked } : f,
+                    ),
+                  };
+                  updateLineFromSchema(idx, next, schema);
+                }
+              }
+            }
+            setPickerTarget(null);
           }}
-          onClose={() => setPickerForIndex(null)}
+          onClose={() => setPickerTarget(null)}
         />
       )}
 
@@ -410,11 +473,184 @@ function parseLines(text: string): Line[] {
 
 function serializeLines(lines: Line[], trailingNewline: boolean): string {
   const out = lines
-    .map((l) => {
-      if (l.kind === "comment") return l.text;
-      if (l.kind === "raw") return l.text;
-      return `${l.key}=${l.value}`;
-    })
+    .map(lineToText)
     .join("\n");
   return out + (trailingNewline && out !== "" ? "\n" : "");
+}
+
+function lineToText(l: Line): string {
+  if (l.kind === "comment") return l.text;
+  if (l.kind === "raw") return l.text;
+  return `${l.key}=${l.value}`;
+}
+
+// Re-parse a single piece of text through the same rules as `parseLines` so a
+// schema-edited row blends back into the array as either a comment, kv, or
+// raw line.
+function lineFromText(raw: string): Line {
+  const t = raw.trim();
+  if (t === "" || t.startsWith("#") || t.startsWith(";")) {
+    return { kind: "comment", text: raw };
+  }
+  const eq = raw.indexOf("=");
+  if (eq > 0) {
+    return { kind: "kv", key: raw.slice(0, eq).trim(), value: raw.slice(eq + 1) };
+  }
+  return { kind: "raw", text: raw };
+}
+
+function pickerInitialPathFor(
+  target: { kind: "generic"; idx: number } | { kind: "schema"; idx: number; fieldId: string },
+  lines: Line[],
+  schema: FileSchema | null,
+): string {
+  if (target.kind === "schema" && schema) {
+    const line = lines[target.idx];
+    if (line) {
+      const parsed = schema.parseLine(lineToText(line));
+      const f = parsed?.fields.find((x) => x.id === target.fieldId);
+      if (f && f.kind.type === "path" && f.kind.pickerInitialPath) {
+        return f.kind.pickerInitialPath;
+      }
+    }
+  }
+  return "/ext/apps";
+}
+
+// ── Schema-driven row ────────────────────────────────────────────────────
+
+function SchemaRow({
+  structured,
+  onChange,
+  onRemove,
+  onPick,
+}: {
+  structured: StructuredLine;
+  onChange: (next: StructuredLine) => void;
+  onRemove: () => void;
+  onPick: (fieldId: string) => void;
+}) {
+  const setField = (id: string, value: string) => {
+    onChange({
+      fields: structured.fields.map((f) => (f.id === id ? { ...f, value } : f)),
+    });
+  };
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {structured.fields.map((f) => (
+        <SchemaField
+          key={f.id}
+          field={f}
+          onChange={(v) => setField(f.id, v)}
+          onPick={() => onPick(f.id)}
+        />
+      ))}
+      <button
+        onClick={onRemove}
+        title="Remove line"
+        className="p-1 text-secondary hover:text-danger rounded hover:bg-elevated"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
+
+function SchemaField({
+  field,
+  onChange,
+  onPick,
+}: {
+  field: Field;
+  onChange: (value: string) => void;
+  onPick: () => void;
+}) {
+  const widthClass =
+    field.width === "sm"
+      ? "w-20"
+      : field.width === "md"
+        ? "w-32"
+        : field.width === "lg"
+          ? "w-52"
+          : "flex-1 min-w-[12rem]";
+
+  if (field.kind.type === "label") {
+    return (
+      <span
+        className={`px-2 py-1 text-[11px] font-mono text-secondary truncate ${widthClass}`}
+        title={field.kind.text}
+      >
+        {field.kind.text}
+      </span>
+    );
+  }
+  if (field.kind.type === "select") {
+    const options = field.kind.options;
+    const known = options.some((o) => o.value === field.value);
+    return (
+      <select
+        value={field.value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${widthClass} px-2 py-1 text-[11px] font-mono text-primary bg-surface/40 border border-border-subtle rounded outline-none focus:border-accent/40`}
+      >
+        {!known && field.value !== "" && (
+          <option value={field.value}>{field.value} (unknown)</option>
+        )}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (field.kind.type === "bool") {
+    const checked = field.value === "true";
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(checked ? "false" : "true")}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-border-subtle transition-colors ${
+          checked ? "bg-accent" : "bg-surface"
+        }`}
+      >
+        <span
+          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-primary shadow-sm transition-transform ${
+            checked ? "translate-x-[18px]" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    );
+  }
+  if (field.kind.type === "path") {
+    return (
+      <div className={`flex items-center gap-1 ${widthClass}`}>
+        <input
+          value={field.value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.kind.placeholder}
+          spellCheck={false}
+          className="flex-1 min-w-0 px-2 py-1 text-[11px] font-mono text-primary bg-surface/40 border border-border-subtle rounded outline-none focus:border-accent/40"
+        />
+        <button
+          onClick={onPick}
+          title="Pick a file from the device"
+          className="p-1 text-secondary hover:text-primary rounded hover:bg-elevated"
+        >
+          <FolderOpen size={12} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <input
+      value={field.value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={field.kind.placeholder}
+      spellCheck={false}
+      className={`${widthClass} px-2 py-1 text-[11px] font-mono text-primary bg-surface/40 border border-border-subtle rounded outline-none focus:border-accent/40`}
+    />
+  );
 }
