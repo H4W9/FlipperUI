@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { AlertTriangle, Nfc, Upload } from "lucide-react";
-import { readFile } from "@tauri-apps/plugin-fs";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { AlertTriangle, Nfc } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { nfcCancelScan, nfcScan, storageWrite } from "../../lib/tauri";
+import { nfcCancelScan, nfcScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadNfcCache, saveNfcCache } from "../../lib/nfcCache";
-import { uint8ArrayToBase64 } from "../../lib/encoding";
+import { useLibraryDrop } from "../../hooks/useLibraryDrop";
+import { LibraryDropOverlay } from "../ui/LibraryDropOverlay";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
 import type { NfcScanProgress } from "../../types/nfc";
@@ -30,8 +28,6 @@ export function NfcLibrary() {
   const [query, setQuery] = useState("");
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [uploadingCount, setUploadingCount] = useState<number>(0);
 
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.nfc.excludedDirs));
@@ -104,75 +100,15 @@ export function NfcLibrary() {
     }
   };
 
-  const uploadOne = useCallback(async (localPath: string) => {
-    const name = localPath.split("/").pop() ?? "";
-    if (!name.toLowerCase().endsWith(".nfc")) {
-      throw new Error(`"${name}" is not a .nfc file`);
-    }
-    const remotePath = `${NFC_ROOT}/${name}`;
-    const bytes = await readFile(localPath);
-    const b64 = uint8ArrayToBase64(bytes);
-    await storageWrite(remotePath, b64);
-  }, []);
-
-  const uploadMany = useCallback(
-    async (paths: string[]) => {
-      if (!isConnected) {
-        setError("Connect a Flipper to upload .nfc files.");
-        return;
-      }
-      const nfcs = paths.filter((p) => p.toLowerCase().endsWith(".nfc"));
-      if (nfcs.length === 0) {
-        setError("No .nfc files in the drop — nothing to upload.");
-        return;
-      }
-      setUploadingCount(nfcs.length);
-      setError(null);
-      try {
-        for (const p of nfcs) {
-          await uploadOne(p);
-        }
-        await runScan();
-      } catch (e) {
-        setError(`Upload failed: ${(e as Error).message || String(e)}`);
-      } finally {
-        setUploadingCount(0);
-      }
-    },
-    [uploadOne, runScan, setError, isConnected],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    getCurrentWebviewWindow()
-      .onDragDropEvent((event) => {
-        if (cancelled) return;
-        if (event.payload.type === "enter") setIsDragOver(true);
-        else if (event.payload.type === "leave") setIsDragOver(false);
-        else if (event.payload.type === "drop") {
-          setIsDragOver(false);
-          void uploadMany(event.payload.paths);
-        }
-      })
-      .then((fn) => {
-        unlisten = fn;
-      });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [uploadMany]);
-
-  const onUploadClick = async () => {
-    const selected = await openDialog({
-      multiple: true,
-      filters: [{ name: "Flipper NFC cards", extensions: ["nfc"] }],
+  const { isDragOver, uploadingCount, openFilePicker, dropZoneHandlers } =
+    useLibraryDrop({
+      rootPath: NFC_ROOT,
+      extensions: ["nfc"],
+      isConnected,
+      setError,
+      onAfterUpload: runScan,
+      kindLabel: "Flipper NFC cards",
     });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    await uploadMany(paths);
-  };
 
   const deviceTypes = useMemo(() => {
     const set = new Set<string>();
@@ -203,7 +139,10 @@ export function NfcLibrary() {
   // Browsable while disconnected — scan, upload, and drag-drop degrade below.
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
+    <div
+      className="flex-1 min-h-0 flex flex-col overflow-hidden relative"
+      {...dropZoneHandlers}
+    >
       <LibraryToolbar
         deviceTypes={deviceTypes}
         deviceTypeFilter={deviceTypeFilter}
@@ -212,7 +151,7 @@ export function NfcLibrary() {
         onQueryChange={setQuery}
         onRefresh={runScan}
         onCancel={cancelScan}
-        onUpload={onUploadClick}
+        onUpload={openFilePicker}
         uploadingCount={uploadingCount}
         total={entries.length}
         filtered={filtered.length}
@@ -237,16 +176,10 @@ export function NfcLibrary() {
         <LibraryTable entries={filtered} />
       )}
 
-      {isDragOver && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-app/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 px-8 py-6 border-2 border-dashed border-accent/60 rounded-xl">
-            <Upload size={32} className="text-accent" />
-            <span className="text-sm text-accent/80 font-medium">
-              Drop .nfc files to upload to {NFC_ROOT}
-            </span>
-          </div>
-        </div>
-      )}
+      <LibraryDropOverlay
+        visible={isDragOver}
+        label={`Drop .nfc files to upload to ${NFC_ROOT}`}
+      />
     </div>
   );
 }

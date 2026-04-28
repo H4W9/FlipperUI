@@ -34,6 +34,7 @@ ______________________________
 [ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens
 [ ] live screen viewer thumbnail in the dashboard - tiny preview of the Flipper screen so you don't have to open the full overlay just to see what's on the device
 [ ] BLE auto-reconnect on connection break/failure
+[ ] fix drag-out from library rows to Finder - useExportDrag (NFC/IR/BadUSB) silently no-ops on macOS. drop-IN works, drop-OUT doesn't. likely cause: @crabnebula/tauri-plugin-drag startDrag must run synchronously inside dragstart, but we read the file from the Flipper async first; by the time startDrag is invoked the dragstart has already concluded and the OS never opens an NSDraggingSession. attempted prefetch-on-hover fix didn't resolve - needs deeper plugin investigation (maybe set effectAllowed earlier, or pre-populate temp file at row mount, or replace plugin)
 
 --- ASSETS ---
 
