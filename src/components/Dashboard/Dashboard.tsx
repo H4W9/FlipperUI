@@ -15,7 +15,6 @@ import {
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { ping, powerInfo, storageDu, storageInfo } from "../../lib/tauri";
 import { FlipperSvgIcon } from "../ui/FlipperSvgIcon";
-import { Spinner } from "../ui/Spinner";
 import { DeviceSettingsCard } from "../DeviceSettings/DeviceSettingsCard";
 import type { StorageInfo as StorageInfoType } from "../../types/flipper";
 
