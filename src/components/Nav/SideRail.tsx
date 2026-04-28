@@ -1,7 +1,6 @@
 import {
   FolderTree,
   Home,
-  Info,
   Menu,
   Monitor,
   Terminal
@@ -54,7 +53,6 @@ const TOP_ITEMS: RailItem[] = [
 ];
 
 const BOTTOM_ITEMS: RailItem[] = [
-  { view: "info", label: "Device Info", Icon: Info, requiresConnection: true },
   { view: "settings", label: "Settings", Icon: flipperIcon(settingsIconSvg, "settings") },
 ];
 

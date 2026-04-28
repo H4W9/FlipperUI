@@ -6,6 +6,7 @@ import {
   Bluetooth,
   HardDrive,
   Home,
+  Info,
   RefreshCw,
   Thermometer,
   Usb,
@@ -140,7 +141,7 @@ export function Dashboard() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col gap-4">
           {/* Hero */}
-          <section className="flex flex-col sm:flex-row items-center sm:items-stretch gap-5 px-4 py-4 bg-panel/60 border border-border-subtle rounded-lg">
+          <section className="relative flex flex-col sm:flex-row items-center sm:items-stretch gap-5 px-4 py-4 bg-panel/60 border border-border-subtle rounded-lg">
             <img
               src={flipperImg}
               alt="Flipper Zero"
@@ -153,9 +154,6 @@ export function Dashboard() {
                   {deviceInfo?.hardware_name ?? "Flipper Zero"}
                 </h1>
                 <ConnectionPill kind={connectionKind} connected={isConnected} />
-                {isConnected && latencyMs != null && (
-                  <LatencyPill ms={latencyMs} />
-                )}
               </div>
               <div className="text-xs text-secondary flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-start">
                 {deviceInfo?.firmware_version && (
@@ -177,15 +175,18 @@ export function Dashboard() {
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setActiveView("info")}
+              disabled={!isConnected}
+              title="Detailed view"
+              aria-label="Open device info detailed view"
+              className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Info size={12} />
+              Detailed view
+            </button>
           </section>
-
-          {!isConnected && (
-            <div className="px-4 py-3 bg-panel/40 border border-border-subtle rounded-lg text-xs text-dim flex items-center gap-2">
-              <Spinner size={12} />
-              No device connected — cached library counts are shown below. Live
-              stats appear after you connect.
-            </div>
-          )}
 
           {/* Stat cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -268,26 +269,6 @@ function ConnectionPill({
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded">
       <Icon size={10} />
       {label}
-    </span>
-  );
-}
-
-function LatencyPill({ ms }: { ms: number }) {
-  // Color buckets are tuned for what's typical on each transport: BLE rounds
-  // trips usually land at 30–80 ms, USB at 5–20 ms. Anything past 200 ms means
-  // contention or a struggling link.
-  const tone =
-    ms <= 50
-      ? "text-success bg-success/10 border-success/30"
-      : ms <= 200
-        ? "text-accent bg-accent/10 border-accent/30"
-        : "text-danger bg-danger/10 border-danger/30";
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide border rounded ${tone}`}
-      title="Round-trip ping latency"
-    >
-      {ms} ms
     </span>
   );
 }

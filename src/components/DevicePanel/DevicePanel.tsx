@@ -179,8 +179,17 @@ export function DevicePanel() {
     const fetchInfo = async () => {
       try {
         const pi = await powerInfo();
-        setBatteryCharge(pi["charge"] ?? null);
-        setBatteryCharging(pi["charging"] === "true");
+        // Firmware versions vary on the key name — newer builds use
+        // `charge_level`, older ones use `charge`. Same for current/charging
+        // (older "charging"=="true", newer report a positive `battery_current`).
+        const charge = pi["charge_level"] ?? pi["charge"] ?? null;
+        setBatteryCharge(charge);
+        const currentMa = Number(
+          pi["battery_current"] ?? pi["current_gauge"] ?? pi["current"] ?? "0",
+        );
+        setBatteryCharging(
+          pi["charging"] === "true" || (Number.isFinite(currentMa) && currentMa > 5),
+        );
       } catch {
         // Power info may not be available on all firmware
       }
@@ -468,13 +477,13 @@ export function DevicePanel() {
             )}
           </div>
 
+          {/* Signal/latency chip */}
+          <SignalChip latencyMs={latency} transport={transport} />
+
           {/* Battery chip */}
           {batteryCharge != null && (
             <BatteryChip charge={Number(batteryCharge)} charging={batteryCharging} />
           )}
-
-          {/* Signal/latency chip */}
-          <SignalChip latencyMs={latency} transport={transport} />
 
           {/* SD card chip */}
           {sdTotal != null && sdFree != null && (
@@ -533,19 +542,26 @@ function BatteryChip({ charge, charging }: { charge: number; charging: boolean }
       : charge <= 75
       ? BatteryMedium
       : BatteryFull;
-  const color =
+  const iconColor =
     charge <= 15
       ? "text-danger"
       : charge <= 35
       ? "text-warning"
       : "text-success";
+  const barColor =
+    charge <= 15
+      ? "bg-danger"
+      : charge <= 35
+      ? "bg-warning"
+      : "bg-success";
+  const pct = Math.max(0, Math.min(100, Math.round(charge)));
   return (
     <div
       className="relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface border border-elevated text-secondary"
       title={`Battery: ${charge}%${charging ? " (charging)" : ""}`}
     >
       <span className="relative inline-flex">
-        <Icon size={13} className={color} />
+        <Icon size={13} className={iconColor} />
         {charging && (
           <Zap
             size={9}
@@ -553,7 +569,13 @@ function BatteryChip({ charge, charging }: { charge: number; charging: boolean }
           />
         )}
       </span>
-      <span className="tabular-nums">{charge}%</span>
+      <span className="tabular-nums">{pct}%</span>
+      <div className="w-12 h-1 bg-elevated rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
