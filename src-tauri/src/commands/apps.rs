@@ -96,6 +96,36 @@ pub fn apps_cancel_scan(state: State<AppState>) -> Result<()> {
     Ok(())
 }
 
+/// Parse a specific list of `.fap` paths without walking the library.
+/// Used by the upload-completion path to incrementally merge freshly-installed
+/// apps into the library view without a full rescan.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn apps_parse_paths(
+    paths: Vec<String>,
+    roots: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppEntry>> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        for r in &roots {
+            validate_root(r)?;
+        }
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode == ConnectionMode::Cli {
+                return Err(FlipperError::CliModeActive);
+            }
+        }
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        apps::parse_paths(client, &paths, &roots)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
 /// Read a `.fap` and extract its embedded 10x10 icon, returned as
 /// base64-encoded raw XBM bytes (32-byte icon slot; only the first 20 are
 /// the 10x10 bitmap, the rest is padding).

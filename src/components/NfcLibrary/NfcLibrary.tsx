@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AlertTriangle, Nfc } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { nfcCancelScan, nfcScan } from "../../lib/tauri";
+import { nfcCancelScan, nfcParsePaths, nfcScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadNfcCache, saveNfcCache } from "../../lib/nfcCache";
 import { useLibraryDrop } from "../../hooks/useLibraryDrop";
@@ -100,13 +100,38 @@ export function NfcLibrary() {
     }
   };
 
+  // Incremental merge after upload: parse only the freshly-written paths and
+  // splice them into the existing entries (replacing same-path overwrites).
+  // Avoids re-walking /ext/nfc just to surface newly-dropped cards.
+  const mergeUploaded = useCallback(
+    async (uploadedPaths: string[]) => {
+      if (uploadedPaths.length === 0) return;
+      try {
+        const parsed = await nfcParsePaths(uploadedPaths);
+        if (parsed.length === 0) return;
+        const current = useFlipperStore.getState().nfcEntries;
+        const byPath = new Map(current.map((e) => [e.path, e]));
+        for (const e of parsed) byPath.set(e.path, e);
+        const next = Array.from(byPath.values());
+        setEntries(next);
+        if (deviceUid) {
+          await saveNfcCache(deviceUid, next).catch(() => {});
+          setCacheScannedAt(Date.now());
+        }
+      } catch (e) {
+        setError(`Couldn't parse uploaded files: ${(e as Error).message || String(e)}`);
+      }
+    },
+    [deviceUid, setEntries, setError],
+  );
+
   const { isDragOver, uploadingCount, openFilePicker, dropZoneHandlers } =
     useLibraryDrop({
       rootPath: NFC_ROOT,
       extensions: ["nfc"],
       isConnected,
       setError,
-      onAfterUpload: runScan,
+      onAfterUpload: mergeUploaded,
       kindLabel: "Flipper NFC cards",
     });
 

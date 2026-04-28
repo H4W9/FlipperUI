@@ -6,6 +6,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import {
   appsCancelScan,
+  appsParsePaths,
   appsReadIcon,
   appsScan,
   storageWriteFromLocal,
@@ -166,16 +167,42 @@ export function AppLibrary() {
   };
 
   const installFap = useCallback(
-    async (localPath: string) => {
+    async (localPath: string): Promise<string | null> => {
       const name = basename(localPath);
       if (!name.toLowerCase().endsWith(".fap")) {
         setError(`Skipped "${name}" — only .fap files can be installed.`);
-        return;
+        return null;
       }
       const remotePath = `${DEFAULT_ROOT}/${name}`;
       await storageWriteFromLocal(remotePath, localPath);
+      return remotePath;
     },
     [setError],
+  );
+
+  // Incremental merge after install: parse only the freshly-written .fap
+  // paths and splice them into existing entries (replacing same-path
+  // overwrites). Avoids re-walking every apps root after a single drop.
+  const mergeInstalled = useCallback(
+    async (uploadedPaths: string[]) => {
+      if (uploadedPaths.length === 0) return;
+      try {
+        const parsed = await appsParsePaths(uploadedPaths, roots);
+        if (parsed.length === 0) return;
+        const current = useFlipperStore.getState().appEntries;
+        const byPath = new Map(current.map((e) => [e.path, e]));
+        for (const e of parsed) byPath.set(e.path, e);
+        const next = Array.from(byPath.values());
+        setEntries(next);
+        if (deviceUid) {
+          await saveAppsCache(deviceUid, next).catch(() => {});
+          setCacheScannedAt(Date.now());
+        }
+      } catch (e) {
+        setError(`Couldn't parse installed apps: ${(e as Error).message || String(e)}`);
+      }
+    },
+    [deviceUid, roots, setEntries, setError],
   );
 
   const installMany = useCallback(
@@ -187,18 +214,20 @@ export function AppLibrary() {
       }
       setInstallingCount(faps.length);
       setError(null);
+      const uploaded: string[] = [];
       try {
         for (const p of faps) {
-          await installFap(p);
+          const remote = await installFap(p);
+          if (remote) uploaded.push(remote);
         }
-        await runScan();
+        await mergeInstalled(uploaded);
       } catch (e) {
         setError(`Install failed: ${(e as Error).message || String(e)}`);
       } finally {
         setInstallingCount(0);
       }
     },
-    [installFap, runScan, setError],
+    [installFap, mergeInstalled, setError],
   );
 
   // Drag-and-drop .fap install

@@ -16,10 +16,11 @@ export interface UseLibraryDropOptions {
   /** Surface errors to the caller's UI. Called with null to clear. */
   setError: (msg: string | null) => void;
   /**
-   * Called after a successful batch upload. Typical use is to re-run the
-   * library scan so the freshly uploaded files appear without a manual refresh.
+   * Called after a successful batch upload with the list of remote Flipper
+   * paths that were just written. Callers typically use this to merge the
+   * new entries into the library view without a full rescan.
    */
-  onAfterUpload?: () => void | Promise<void>;
+  onAfterUpload?: (uploadedRemotePaths: string[]) => void | Promise<void>;
   /**
    * Friendly name for dialog labels and error messages, e.g. "Flipper NFC
    * cards" → "No .nfc files in the drop". Defaults to `${exts} files`.
@@ -107,13 +108,15 @@ export function useLibraryDrop({
       }
       setUploadingCount(accepted.length);
       setError(null);
+      const uploaded: string[] = [];
       try {
         for (const p of accepted) {
           const name = basename(p);
           const remotePath = `${rootPath}/${name}`;
           await storageWriteFromLocal(remotePath, p);
+          uploaded.push(remotePath);
         }
-        if (onAfterUpload) await onAfterUpload();
+        if (onAfterUpload) await onAfterUpload(uploaded);
       } catch (e) {
         setError(`Upload failed: ${(e as Error).message || String(e)}`);
       } finally {
@@ -138,13 +141,15 @@ export function useLibraryDrop({
       }
       setUploadingCount(accepted.length);
       setError(null);
+      const uploaded: string[] = [];
       try {
         for (const f of accepted) {
           const remotePath = `${rootPath}/${f.name}`;
           const buf = new Uint8Array(await f.arrayBuffer());
           await storageWrite(remotePath, uint8ArrayToBase64(buf));
+          uploaded.push(remotePath);
         }
-        if (onAfterUpload) await onAfterUpload();
+        if (onAfterUpload) await onAfterUpload(uploaded);
       } catch (e) {
         setError(`Upload failed: ${(e as Error).message || String(e)}`);
       } finally {

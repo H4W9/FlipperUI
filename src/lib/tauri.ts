@@ -301,6 +301,16 @@ export const nfcScan = async (
 export const nfcCancelScan = (): Promise<void> =>
   invoke<void>("nfc_cancel_scan");
 
+/**
+ * Parse the given `.nfc` paths only — no directory walk. Returns one
+ * `NfcEntry` per readable path; non-`.nfc` and unreadable paths are dropped.
+ * Used to merge freshly-uploaded files into the library without a full rescan.
+ */
+export const nfcParsePaths = async (paths: string[]): Promise<NfcEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<NfcEntry[]>("nfc_parse_paths", { paths });
+};
+
 // ── BadUSB library ──────────────────────────────────────────────────────
 
 /**
@@ -352,6 +362,20 @@ export const appsScan = async (
 /** Abort an in-progress App library scan. */
 export const appsCancelScan = (): Promise<void> =>
   invoke<void>("apps_cancel_scan");
+
+/**
+ * Parse the given `.fap` paths only — no directory walk. `roots` is the same
+ * list of apps roots used for scans; the backend picks the longest matching
+ * prefix to derive each entry's `category`. Used to merge freshly-installed
+ * apps into the library without a full rescan.
+ */
+export const appsParsePaths = async (
+  paths: string[],
+  roots: string[],
+): Promise<AppEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<AppEntry[]>("apps_parse_paths", { paths, roots });
+};
 
 /**
  * Read a .fap and extract its embedded 10x10 icon. Returns base64-encoded

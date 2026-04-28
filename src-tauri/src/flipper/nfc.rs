@@ -109,6 +109,50 @@ pub fn scan_library(
     Ok(entries)
 }
 
+/// Parse a specific list of `.nfc` paths without walking any directory.
+///
+/// Used by the upload-completion path so freshly-written files can be merged
+/// into the library view without re-walking `/ext/nfc`. Non-`.nfc` and
+/// unreadable paths are skipped silently — the same behaviour as a full scan.
+pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<NfcEntry>> {
+    let dummy_cancel = Arc::new(AtomicBool::new(false));
+    let mut entries = Vec::with_capacity(paths.len());
+
+    for path in paths {
+        if !has_nfc_extension(path) {
+            continue;
+        }
+        let stat = match storage::storage_stat(client, path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(?e, %path, "skipping unstattable .nfc path");
+                continue;
+            }
+        };
+        if stat.r#type == 1 {
+            continue;
+        }
+
+        let mtime = storage::storage_timestamp(client, path).ok();
+        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(?e, %path, "skipping unreadable .nfc path");
+                continue;
+            }
+        };
+
+        let text = String::from_utf8_lossy(&bytes);
+        let name = file_basename(path).to_string();
+        let mut entry = parse_nfc(path, &name, &text);
+        entry.size = stat.size;
+        entry.mtime = mtime;
+        entries.push(entry);
+    }
+
+    Ok(entries)
+}
+
 fn walk_dir(
     client: &mut FlipperClient,
     dir: &str,

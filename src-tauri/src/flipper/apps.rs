@@ -115,6 +115,72 @@ pub fn scan_library(
     Ok(entries)
 }
 
+/// Parse a specific list of `.fap` paths without walking any directory.
+///
+/// Used by the upload-completion path so freshly-installed apps can be merged
+/// into the library view without re-walking the apps roots. The matching root
+/// is picked as the longest path-prefix from `roots` that contains the file;
+/// paths that match no root are dropped.
+pub fn parse_paths(
+    client: &mut FlipperClient,
+    paths: &[String],
+    roots: &[String],
+) -> Result<Vec<AppEntry>> {
+    let normalized_roots: Vec<String> = roots
+        .iter()
+        .map(|r| r.trim_end_matches('/').to_string())
+        .filter(|r| !r.is_empty())
+        .collect();
+
+    let mut entries = Vec::with_capacity(paths.len());
+
+    for path in paths {
+        if !has_fap_extension(path) {
+            continue;
+        }
+        let stat = match storage::storage_stat(client, path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(?e, %path, "skipping unstattable .fap path");
+                continue;
+            }
+        };
+        if stat.r#type == 1 {
+            continue;
+        }
+
+        let Some(root) = pick_root(path, &normalized_roots) else {
+            tracing::warn!(%path, "no matching apps root, skipping");
+            continue;
+        };
+
+        let mtime = storage::storage_timestamp(client, path).ok();
+        let name = file_basename(path)
+            .strip_suffix_ignore_case(".fap")
+            .unwrap_or_else(|| file_basename(path).to_string());
+        let category = parent_dir_name(path, &root);
+
+        entries.push(AppEntry {
+            path: path.clone(),
+            name,
+            category,
+            size: stat.size,
+            root,
+            mtime,
+        });
+    }
+
+    Ok(entries)
+}
+
+fn pick_root(path: &str, roots: &[String]) -> Option<String> {
+    roots
+        .iter()
+        .filter(|r| path == r.as_str() || path.starts_with(&format!("{r}/")))
+        .max_by_key(|r| r.len())
+        .cloned()
+}
+
 fn walk_dir(
     client: &mut FlipperClient,
     dir: &str,

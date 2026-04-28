@@ -6,7 +6,7 @@ use tauri::{AppHandle, State};
 use crate::commands::library_scan::run_library_scan;
 use crate::error::{FlipperError, Result};
 use crate::flipper::nfc::{self, NfcEntry};
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionMode};
 
 /// Recursively scan a directory for `.nfc` files and parse their headers.
 /// Emits `nfc-scan-progress` events as it works.
@@ -53,4 +53,30 @@ pub async fn nfc_scan(
 pub fn nfc_cancel_scan(state: State<AppState>) -> Result<()> {
     state.nfc_scan_cancelled.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+/// Parse a specific list of `.nfc` paths without walking the library.
+/// Used by the upload-completion path to incrementally merge freshly-written
+/// files into the library view without a full rescan of `/ext/nfc`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn nfc_parse_paths(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<NfcEntry>> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode == ConnectionMode::Cli {
+                return Err(FlipperError::CliModeActive);
+            }
+        }
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        nfc::parse_paths(client, &paths)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
