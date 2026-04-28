@@ -178,7 +178,7 @@ where
             };
             write_message(&mut *client.transport, &abort_frame)?;
             let _ = read_response(&mut *client.transport); // read the response
-                                                          // Delete the incomplete file
+                                                           // Delete the incomplete file
             let _ = storage_delete(client, path, false);
             return Err(FlipperError::TransferCancelled);
         }

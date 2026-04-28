@@ -81,7 +81,8 @@ pub fn build_tray_menu(
     // Navigation shortcuts. The frontend listens for "tray-nav" events and
     // calls setActiveView with the payload. Items that require a connection
     // (libraries) are disabled when no device is attached.
-    let nav_dashboard = MenuItemBuilder::with_id("tray-nav-dashboard", "Open Dashboard").build(app)?;
+    let nav_dashboard =
+        MenuItemBuilder::with_id("tray-nav-dashboard", "Open Dashboard").build(app)?;
     let nav_files = MenuItemBuilder::with_id("tray-nav-files", "File Explorer")
         .enabled(status.connected)
         .build(app)?;

@@ -32,7 +32,11 @@ pub struct TrayStatus {
 static TRAY_STATUS: Mutex<Option<TrayStatus>> = Mutex::new(None);
 
 pub fn tray_status() -> TrayStatus {
-    TRAY_STATUS.lock().ok().and_then(|g| g.clone()).unwrap_or_default()
+    TRAY_STATUS
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_default()
 }
 
 /// Process-wide desired state for the monochrome tray icon. Read by
