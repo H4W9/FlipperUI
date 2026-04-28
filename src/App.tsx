@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { connect, connectBleDevice } from "./lib/tauri";
 import { DevicePanel } from "./components/DevicePanel/DevicePanel";
 import { FileBrowser } from "./components/FileBrowser/FileBrowser";
 import { CliPanel } from "./components/CliPanel/CliPanel";
@@ -65,15 +66,77 @@ export default function App() {
   // (or any other background worker) tears the client down after an
   // unrecoverable serial error. Without this the UI would keep showing
   // "connected" over a dead link.
+  //
+  // After teardown we attempt a single auto-reconnect against the last-used
+  // transport (BLE id or USB port), with backoff and a small retry budget.
+  // Manual disconnects via the DevicePanel skip the retry path entirely
+  // because they don't go through `flipper-disconnected`.
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    const cancel = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const tryReconnect = async () => {
+      if (cancelled) return;
+      const settings = await loadSettings().catch(() => null);
+      if (!settings || cancelled) return;
+
+      // Bail out if a manual reconnect already succeeded while we were
+      // backing off — Zustand snapshot is the source of truth.
+      if (useFlipperStore.getState().isConnected) {
+        reconnectAttemptsRef.current = 0;
+        return;
+      }
+
+      const { transport, lastPort, lastBleId, lastBleName } = settings.connection;
+      try {
+        if (transport === "ble" && lastBleId) {
+          const info = await connectBleDevice(lastBleId, lastBleName ?? undefined);
+          setConnected(info);
+          setError(null);
+          reconnectAttemptsRef.current = 0;
+          return;
+        }
+        if (transport === "usb" && lastPort) {
+          const info = await connect(lastPort);
+          setConnected(info);
+          setError(null);
+          reconnectAttemptsRef.current = 0;
+          return;
+        }
+      } catch {
+        // Fall through to schedule the next attempt.
+      }
+
+      // Exponential backoff capped at ~10s, give up after 5 tries.
+      reconnectAttemptsRef.current += 1;
+      if (reconnectAttemptsRef.current >= 5) return;
+      const delay = Math.min(10_000, 1_000 * 2 ** (reconnectAttemptsRef.current - 1));
+      reconnectTimerRef.current = window.setTimeout(tryReconnect, delay);
+    };
+
     listen<string>("flipper-disconnected", (event) => {
       setConnected(null);
-      setError(`Disconnected: ${event.payload}`);
+      setError(`Disconnected: ${event.payload} — reconnecting…`);
+      cancel();
+      reconnectAttemptsRef.current = 0;
+      // Initial 500ms grace so the OS has time to release the serial port /
+      // BLE peripheral before we try to grab it back.
+      reconnectTimerRef.current = window.setTimeout(tryReconnect, 500);
     }).then((u) => {
       unlisten = u;
     });
     return () => {
+      cancelled = true;
+      cancel();
       unlisten?.();
     };
   }, [setConnected, setError]);
