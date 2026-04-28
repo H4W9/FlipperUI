@@ -348,6 +348,8 @@ pub fn run() {
             commands::storage::storage_stat,
             commands::storage::storage_read,
             commands::storage::storage_write,
+            commands::storage::storage_read_to_local,
+            commands::storage::storage_write_from_local,
             commands::storage::storage_mkdir,
             commands::storage::storage_delete,
             commands::storage::storage_rename,

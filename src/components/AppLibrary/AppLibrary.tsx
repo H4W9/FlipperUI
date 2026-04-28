@@ -2,20 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { AlertTriangle, LayoutGrid, Upload } from "lucide-react";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import {
   appsCancelScan,
   appsReadIcon,
   appsScan,
-  storageWrite,
+  storageWriteFromLocal,
 } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadAppsCache, saveAppIcons, saveAppsCache } from "../../lib/appsCache";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
-import { uint8ArrayToBase64 } from "../../lib/encoding";
+import { basename } from "../../lib/path";
 import type { AppScanProgress } from "../../types/apps";
 
 const DEFAULT_ROOT = "/ext/apps";
@@ -168,15 +167,13 @@ export function AppLibrary() {
 
   const installFap = useCallback(
     async (localPath: string) => {
-      const name = localPath.split("/").pop() ?? "";
+      const name = basename(localPath);
       if (!name.toLowerCase().endsWith(".fap")) {
         setError(`Skipped "${name}" — only .fap files can be installed.`);
         return;
       }
       const remotePath = `${DEFAULT_ROOT}/${name}`;
-      const bytes = await readFile(localPath);
-      const b64 = uint8ArrayToBase64(bytes);
-      await storageWrite(remotePath, b64);
+      await storageWriteFromLocal(remotePath, localPath);
     },
     [setError],
   );

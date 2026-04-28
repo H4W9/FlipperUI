@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
-import { storageWrite } from "../lib/tauri";
+import { storageWrite, storageWriteFromLocal } from "../lib/tauri";
 import { uint8ArrayToBase64 } from "../lib/encoding";
+import { basename } from "../lib/path";
 
 export interface UseLibraryDropOptions {
   /** Absolute Flipper path to upload into (e.g. "/ext/nfc"). */
@@ -52,11 +52,6 @@ export interface UseLibraryDropResult {
   dropZoneHandlers: DropZoneHandlers;
 }
 
-function basename(p: string): string {
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return i >= 0 ? p.slice(i + 1) : p;
-}
-
 function hasAcceptedExt(name: string, exts: string[]): boolean {
   const lower = name.toLowerCase();
   return exts.some((ext) => lower.endsWith(`.${ext}`));
@@ -89,10 +84,15 @@ export function useLibraryDrop({
   // between child elements inside the drop zone.
   const enterDepthRef = useRef(0);
 
-  const exts = extensions.map((e) => e.toLowerCase().replace(/^\./, ""));
-  const dotList = exts.map((e) => `.${e}`).join("/");
-  const label = kindLabel ?? `${dotList} files`;
-  const extsKey = exts.join(",");
+  const exts = useMemo(
+    () => extensions.map((e) => e.toLowerCase().replace(/^\./, "")),
+    [extensions],
+  );
+  const dotList = useMemo(() => exts.map((e) => `.${e}`).join("/"), [exts]);
+  const label = useMemo(
+    () => kindLabel ?? `${dotList} files`,
+    [dotList, kindLabel],
+  );
 
   const uploadFromPaths = useCallback(
     async (paths: string[]) => {
@@ -111,8 +111,7 @@ export function useLibraryDrop({
         for (const p of accepted) {
           const name = basename(p);
           const remotePath = `${rootPath}/${name}`;
-          const bytes = await readFile(p);
-          await storageWrite(remotePath, uint8ArrayToBase64(bytes));
+          await storageWriteFromLocal(remotePath, p);
         }
         if (onAfterUpload) await onAfterUpload();
       } catch (e) {
@@ -120,9 +119,8 @@ export function useLibraryDrop({
       } finally {
         setUploadingCount(0);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [rootPath, isConnected, setError, onAfterUpload, dotList, extsKey],
+    [dotList, exts, isConnected, onAfterUpload, rootPath, setError],
   );
 
   const uploadFromDataTransfer = useCallback(
@@ -152,9 +150,8 @@ export function useLibraryDrop({
       } finally {
         setUploadingCount(0);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [rootPath, isConnected, setError, onAfterUpload, dotList, extsKey],
+    [dotList, exts, isConnected, onAfterUpload, rootPath, setError],
   );
 
   const dropZoneHandlers: DropZoneHandlers = {
@@ -203,8 +200,7 @@ export function useLibraryDrop({
     if (!selected) return;
     const paths = Array.isArray(selected) ? selected : [selected];
     await uploadFromPaths(paths);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uploadFromPaths, extsKey, label]);
+  }, [exts, label, uploadFromPaths]);
 
   // Keep `getCurrentWebviewWindow` referenced so tree-shakers don't drop it —
   // we may need it for future fallbacks. (No active subscription here on

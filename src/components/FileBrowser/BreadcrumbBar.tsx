@@ -5,7 +5,8 @@ import { useStorage } from "../../hooks/useStorage";
 type Volume = "ext" | "int";
 
 export function BreadcrumbBar() {
-  const { currentPath, setCurrentPath } = useFlipperStore();
+  const currentPath = useFlipperStore((s) => s.currentPath);
+  const setCurrentPath = useFlipperStore((s) => s.setCurrentPath);
   const { refresh } = useStorage();
 
   const parts = currentPath.split("/").filter(Boolean);

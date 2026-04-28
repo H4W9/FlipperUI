@@ -11,7 +11,8 @@ import { ErrorBanner } from "../ui/ErrorBanner";
 import { Upload } from "lucide-react";
 
 export function FileBrowser() {
-  const { currentPath, transferProgress } = useFlipperStore();
+  const currentPath = useFlipperStore((s) => s.currentPath);
+  const transferProgress = useFlipperStore((s) => s.transferProgress);
   const { refresh, uploadFile } = useStorage();
   const [isDragOver, setIsDragOver] = useState(false);
   // Folder under the cursor during a drag, so we can highlight it and route

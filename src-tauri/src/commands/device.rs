@@ -34,7 +34,8 @@ pub struct DeviceInfo {
 }
 
 /// List serial ports that belong to a Flipper Zero.
-/// Filters ports to only those with "usbmodemflip" in the port name.
+/// On macOS, filters ports to the Flipper's `usbmodemflip*` device names to
+/// avoid surfacing unrelated serial ports in the picker.
 #[tauri::command]
 pub fn list_ports() -> Result<Vec<PortInfo>> {
     // Note: list_ports is kept synchronous because serialport::available_ports()
@@ -44,8 +45,7 @@ pub fn list_ports() -> Result<Vec<PortInfo>> {
     Ok(ports
         .into_iter()
         .filter_map(|p| {
-            // Only include ports with "usbmodemflip" in the name
-            if !p.port_name.to_lowercase().contains("usbmodemflip") {
+            if cfg!(target_os = "macos") && !p.port_name.to_lowercase().contains("usbmodemflip") {
                 return None;
             }
             let (vid, pid, manufacturer) = match &p.port_type {

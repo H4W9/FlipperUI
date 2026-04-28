@@ -4,7 +4,8 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
 
 export function Toolbar() {
-  const { currentPath, isLoading } = useFlipperStore();
+  const currentPath = useFlipperStore((s) => s.currentPath);
+  const isLoading = useFlipperStore((s) => s.isLoading);
   const { upload, mkdir, refresh } = useStorage();
 
   // Ctrl+U to upload

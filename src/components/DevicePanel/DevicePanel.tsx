@@ -17,18 +17,16 @@ function formatBytes(bytes: number): string {
 }
 
 export function DevicePanel() {
-  const {
-    ports,
-    selectedPort,
-    deviceInfo,
-    isConnected,
-    isConnecting,
-    setPorts,
-    setSelectedPort,
-    setConnecting,
-    setConnected,
-    setError,
-  } = useFlipperStore();
+  const ports = useFlipperStore((s) => s.ports);
+  const selectedPort = useFlipperStore((s) => s.selectedPort);
+  const deviceInfo = useFlipperStore((s) => s.deviceInfo);
+  const isConnected = useFlipperStore((s) => s.isConnected);
+  const isConnecting = useFlipperStore((s) => s.isConnecting);
+  const setPorts = useFlipperStore((s) => s.setPorts);
+  const setSelectedPort = useFlipperStore((s) => s.setSelectedPort);
+  const setConnecting = useFlipperStore((s) => s.setConnecting);
+  const setConnected = useFlipperStore((s) => s.setConnected);
+  const setError = useFlipperStore((s) => s.setError);
 
   const [batteryCharge, setBatteryCharge] = useState<string | null>(null);
   const [batteryCharging, setBatteryCharging] = useState(false);

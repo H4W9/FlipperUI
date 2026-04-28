@@ -217,7 +217,8 @@ function FileRow({
   onSelect,
   style,
 }: FileRowProps) {
-  const { currentPath, setCurrentPath } = useFlipperStore();
+  const currentPath = useFlipperStore((s) => s.currentPath);
+  const setCurrentPath = useFlipperStore((s) => s.setCurrentPath);
   const { refresh, download, rename } = useStorage();
   const isDir = entry.file_type === 1;
 
@@ -406,7 +407,10 @@ function SortHeader({
 // ── FileList ─────────────────────────────────────────────────────────────────
 
 export function FileList() {
-  const { entries, isLoading, currentPath, setError } = useFlipperStore();
+  const entries = useFlipperStore((s) => s.entries);
+  const isLoading = useFlipperStore((s) => s.isLoading);
+  const currentPath = useFlipperStore((s) => s.currentPath);
+  const setError = useFlipperStore((s) => s.setError);
   const { download, remove, refresh } = useStorage();
 
   const [renamingName, setRenamingName] = useState("");

@@ -37,7 +37,9 @@ export function BleDialog({ onClose }: BleDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
 
-  const { setConnecting, setConnected, setError: setStoreError } = useFlipperStore();
+  const setConnecting = useFlipperStore((s) => s.setConnecting);
+  const setConnected = useFlipperStore((s) => s.setConnected);
+  const setStoreError = useFlipperStore((s) => s.setError);
 
   // Holds the most recent map of devices keyed by id, so the listener can
   // merge updates without depending on a setState closure (which would race

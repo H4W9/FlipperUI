@@ -3,7 +3,8 @@ import { X } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 
 export function ErrorBanner() {
-  const { error, setError } = useFlipperStore();
+  const error = useFlipperStore((s) => s.error);
+  const setError = useFlipperStore((s) => s.setError);
 
   useEffect(() => {
     if (!error) return;

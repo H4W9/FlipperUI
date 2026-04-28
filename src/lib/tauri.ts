@@ -94,6 +94,22 @@ export const storageWrite = async (path: string, data: string): Promise<void> =>
   return invoke<void>("storage_write", { path, data });
 };
 
+export const storageReadToLocal = async (
+  path: string,
+  localPath: string,
+): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("storage_read_to_local", { path, local_path: localPath });
+};
+
+export const storageWriteFromLocal = async (
+  path: string,
+  localPath: string,
+): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("storage_write_from_local", { path, local_path: localPath });
+};
+
 export const storageMkdir = async (path: string): Promise<void> => {
   await awaitCliCleanup();
   return invoke<void>("storage_mkdir", { path });

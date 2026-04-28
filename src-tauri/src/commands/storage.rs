@@ -203,6 +203,77 @@ pub async fn storage_write(
     .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
+/// Read a remote Flipper file and persist it directly to a local filesystem
+/// path. This avoids base64-encoding the payload through the webview.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn storage_read_to_local(
+    path: String,
+    local_path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cancelled = Arc::clone(&state.transfer_cancelled);
+    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_path(&path)?;
+        let data = with_client(&mode_mutex, &client_mutex, |c| {
+            storage::storage_read(
+                c,
+                &path,
+                |received, total| {
+                    let pct = (received * 100)
+                        .checked_div(total)
+                        .map(|v| v as u32)
+                        .unwrap_or(0);
+                    let _ = app.emit("download-progress", pct);
+                },
+                &cancelled,
+            )
+        })?;
+        std::fs::write(local_path, data)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+/// Read a local filesystem path and upload it directly to the Flipper without
+/// base64-encoding the payload through the webview.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn storage_write_from_local(
+    path: String,
+    local_path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cancelled = Arc::clone(&state.transfer_cancelled);
+    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_path(&path)?;
+        let bytes = std::fs::read(local_path)?;
+        with_client(&mode_mutex, &client_mutex, |c| {
+            storage::storage_write(
+                c,
+                &path,
+                &bytes,
+                |sent, total| {
+                    let pct = (sent * 100 / total) as u32;
+                    let _ = app.emit("upload-progress", pct);
+                },
+                &cancelled,
+            )
+        })
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
 #[tauri::command]
 pub async fn storage_mkdir(path: String, state: State<'_, AppState>) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);

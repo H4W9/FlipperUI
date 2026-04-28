@@ -13,7 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
-import { ping, powerInfo, storageDu, storageInfo } from "../../lib/tauri";
+import { powerInfo, storageDu, storageInfo } from "../../lib/tauri";
 import { FlipperSvgIcon } from "../ui/FlipperSvgIcon";
 import { DeviceSettingsCard } from "../DeviceSettings/DeviceSettingsCard";
 import type { StorageInfo as StorageInfoType } from "../../types/flipper";
@@ -50,7 +50,6 @@ export function Dashboard() {
   const [power, setPower] = useState<Record<string, string> | null>(null);
   const [sd, setSd] = useState<StorageInfoType | null>(null);
   const [internalBytes, setInternalBytes] = useState<number | null>(null);
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
   const inflight = useRef(false);
@@ -77,11 +76,6 @@ export function Dashboard() {
       } catch {
         setInternalBytes(null);
       }
-      try {
-        setLatencyMs(await ping());
-      } catch {
-        setLatencyMs(null);
-      }
       setRefreshedAt(Date.now());
     } finally {
       setLoading(false);
@@ -94,7 +88,6 @@ export function Dashboard() {
       setPower(null);
       setSd(null);
       setInternalBytes(null);
-      setLatencyMs(null);
       setRefreshedAt(null);
       return;
     }

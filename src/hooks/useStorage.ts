@@ -1,16 +1,16 @@
 import { useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
-import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import {
   storageList,
-  storageRead,
-  storageWrite,
+  storageReadToLocal,
+  storageWriteFromLocal,
   storageMkdir,
   storageDelete,
   storageRename,
 } from "../lib/tauri";
-import { base64ToUint8Array, uint8ArrayToBase64, joinPath } from "../lib/encoding";
+import { joinPath } from "../lib/encoding";
+import { basename } from "../lib/path";
 import { useFlipperStore } from "../store/useFlipperStore";
 
 export function useStorage() {
@@ -51,9 +51,8 @@ export function useStorage() {
         setTransferProgress(event.payload);
       });
 
-      const b64 = await storageRead(remotePath);
+      await storageReadToLocal(remotePath, savePath);
       setTransferProgress(100);
-      await writeFile(savePath, base64ToUint8Array(b64));
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);
@@ -78,8 +77,7 @@ export function useStorage() {
     let unlisten: (() => void) | undefined;
     let failed = false;
     try {
-      const localBytes = await readFile(localPath);
-      const fileName = localPath.split("/").pop() ?? "file";
+      const fileName = basename(localPath) || "file";
       const remotePath = joinPath(dir, fileName);
 
       setTransferProgress(0);
@@ -88,8 +86,7 @@ export function useStorage() {
         setTransferProgress(event.payload);
       });
 
-      const b64 = uint8ArrayToBase64(localBytes);
-      await storageWrite(remotePath, b64);
+      await storageWriteFromLocal(remotePath, localPath);
 
       // Only refresh the visible listing when the upload landed there;
       // otherwise the user is still looking at currentPath and we'd flicker.

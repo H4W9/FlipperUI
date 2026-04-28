@@ -14,21 +14,16 @@ let cliCleanupPromise: Promise<void> | null = null;
 export const getCliCleanupPromise = () => cliCleanupPromise;
 
 export function CliPanel() {
-  const {
-    cliHistory,
-    cliConnected,
-    addCliLine,
-    clearCli,
-    setCliConnected,
-    currentPath,
-  } = useFlipperStore();
+  const cliHistory = useFlipperStore((s) => s.cliHistory);
+  const cliConnected = useFlipperStore((s) => s.cliConnected);
+  const addCliLine = useFlipperStore((s) => s.addCliLine);
+  const clearCli = useFlipperStore((s) => s.clearCli);
+  const setCliConnected = useFlipperStore((s) => s.setCliConnected);
   const [input, setInput] = useState("");
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const currentPathRef = useRef(currentPath);
-  useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
 
   // Auto-scroll to bottom when history changes
   useEffect(() => {
