@@ -15,6 +15,7 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useExportDrag } from "../../hooks/useExportDrag";
+import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveSubghzCache } from "../../lib/subghzCache";
 import type { SubGhzEntry } from "../../types/subghz";
@@ -394,35 +395,11 @@ function shortPreset(p: string | null): string {
   return p.replace(/^FuriHalSubGhzPreset/i, "");
 }
 
-function relativeDir(path: string, root: string): string {
-  const prefix = root.replace(/\/$/, "") + "/";
-  if (!path.startsWith(prefix)) return "";
-  const rest = path.slice(prefix.length);
-  const idx = rest.lastIndexOf("/");
-  return idx < 0 ? "" : rest.slice(0, idx);
-}
 
-function parentDir(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx <= 0 ? "/" : path.slice(0, idx);
-}
 
 // Append " 1", " 2", … before the extension until the name is free. qFlipper
 // uses " (1)"; spaces + parens work on Flipper's FAT32 store but trip some
 // users up — simpler numeric suffix matches the rest of the app.
-function nextDuplicateName(name: string, existing: Set<string>): string {
-  const dot = name.lastIndexOf(".");
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : "";
-  // Strip any existing trailing " N" so duplicating a duplicate doesn't stack
-  // suffixes forever.
-  const stripped = base.replace(/ \d+$/, "");
-  for (let n = 1; n < 10_000; n++) {
-    const candidate = `${stripped} ${n}${ext}`;
-    if (!existing.has(candidate)) return candidate;
-  }
-  return `${stripped} copy${ext}`;
-}
 
 function sortEntries(
   entries: SubGhzEntry[],

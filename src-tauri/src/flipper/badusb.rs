@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// Parsed metadata for a single BadUSB / BadKB script.
@@ -40,9 +41,6 @@ pub struct BadUsbEntry {
     pub mtime: Option<u32>,
 }
 
-/// Progress callback fired after each parsed file. `scanned` ≤ `total`.
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Recursively scan `roots` for `.txt` Duckyscript files, parse them, and
 /// return the combined list. `kind_for_root` maps each root to the entry
 /// `kind` label ("usb" or "kb"). Mirrors [`crate::flipper::nfc::scan_library`]
@@ -53,7 +51,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, BadUsbEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<BadUsbEntry>> {
     let mut files: Vec<(String, u32, String)> = Vec::new();
 
@@ -97,7 +95,7 @@ pub fn scan_library(
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_script(path, &name, kind, &text);
         entry.size = *size;
         entry.mtime = current_mtime;
@@ -115,42 +113,21 @@ fn walk_dir(
     kind: &str,
     out: &mut Vec<(String, u32, String)>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, kind, out)?;
-        } else if has_txt_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".txt")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push((child, f.size, kind.to_string()));
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_txt_extension(name: &str) -> bool {
-    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".txt")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// Parse a Duckyscript body for library-view metadata. Counts non-blank lines
@@ -232,17 +209,23 @@ ENTER
 
     #[test]
     fn txt_extension_match() {
-        assert!(has_txt_extension("foo.txt"));
-        assert!(has_txt_extension("foo.TXT"));
-        assert!(!has_txt_extension("foo.md"));
-        assert!(!has_txt_extension("txt"));
+        assert!(library_walk::has_extension_ci("foo.txt", ".txt"));
+        assert!(library_walk::has_extension_ci("foo.TXT", ".txt"));
+        assert!(!library_walk::has_extension_ci("foo.md", ".txt"));
+        assert!(!library_walk::has_extension_ci("txt", ".txt"));
     }
 
     #[test]
     fn excluded_path_logic() {
         let excluded = vec!["/ext/badusb/private".to_string()];
-        assert!(is_excluded("/ext/badusb/private", &excluded));
-        assert!(is_excluded("/ext/badusb/private/x.txt", &excluded));
-        assert!(!is_excluded("/ext/badusb/public/x.txt", &excluded));
+        assert!(library_walk::is_excluded("/ext/badusb/private", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/badusb/private/x.txt",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/badusb/public/x.txt",
+            &excluded
+        ));
     }
 }

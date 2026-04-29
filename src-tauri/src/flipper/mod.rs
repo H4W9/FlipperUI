@@ -9,6 +9,7 @@ pub mod fap_icon;
 pub mod framing;
 pub mod gui;
 pub mod infrared;
+pub mod library_walk;
 pub mod nfc;
 pub mod rfid;
 pub mod session;

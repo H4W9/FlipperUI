@@ -21,6 +21,7 @@ import {
 } from "../../lib/tauri";
 import { saveAppsCache } from "../../lib/appsCache";
 import { useExportDrag } from "../../hooks/useExportDrag";
+import { relativeDir, parentDir } from "../../lib/path";
 import { base64ToUint8Array } from "../../lib/encoding";
 import { FapIcon } from "./FapIcon";
 import type { AppEntry } from "../../types/apps";
@@ -422,18 +423,7 @@ function formatSize(bytes: number): string {
   return `${(kb / 1024).toFixed(2)} MB`;
 }
 
-function relativeDir(path: string, root: string): string {
-  const prefix = root.replace(/\/$/, "") + "/";
-  if (!path.startsWith(prefix)) return "";
-  const rest = path.slice(prefix.length);
-  const idx = rest.lastIndexOf("/");
-  return idx < 0 ? "" : rest.slice(0, idx);
-}
 
-function parentDir(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx <= 0 ? "/" : path.slice(0, idx);
-}
 
 function sortEntries(
   entries: AppEntry[],

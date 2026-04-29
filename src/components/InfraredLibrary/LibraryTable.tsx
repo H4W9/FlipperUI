@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useExportDrag } from "../../hooks/useExportDrag";
+import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveInfraredCache } from "../../lib/infraredCache";
 import type { IrEntry } from "../../types/infrared";
@@ -359,30 +360,8 @@ function summarizeProtocols(entry: IrEntry): string {
   return parts.join(" · ") || "—";
 }
 
-function relativeDir(path: string, root: string): string {
-  const prefix = root.replace(/\/$/, "") + "/";
-  if (!path.startsWith(prefix)) return "";
-  const rest = path.slice(prefix.length);
-  const idx = rest.lastIndexOf("/");
-  return idx < 0 ? "" : rest.slice(0, idx);
-}
 
-function parentDir(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx <= 0 ? "/" : path.slice(0, idx);
-}
 
-function nextDuplicateName(name: string, existing: Set<string>): string {
-  const dot = name.lastIndexOf(".");
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : "";
-  const stripped = base.replace(/ \d+$/, "");
-  for (let n = 1; n < 10_000; n++) {
-    const candidate = `${stripped} ${n}${ext}`;
-    if (!existing.has(candidate)) return candidate;
-  }
-  return `${stripped} copy${ext}`;
-}
 
 function sortEntries(
   entries: IrEntry[],

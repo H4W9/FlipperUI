@@ -22,6 +22,8 @@ import {
 } from "../../lib/tauri";
 import { saveNfcCache } from "../../lib/nfcCache";
 import { useExportDrag } from "../../hooks/useExportDrag";
+import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
+import { formatSize } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
 import type { NfcEntry } from "../../types/nfc";
 
@@ -403,37 +405,9 @@ function summarizeType(entry: NfcEntry): string {
   return dev || "—";
 }
 
-function formatSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
-function relativeDir(path: string, root: string): string {
-  const prefix = root.replace(/\/$/, "") + "/";
-  if (!path.startsWith(prefix)) return "";
-  const rest = path.slice(prefix.length);
-  const idx = rest.lastIndexOf("/");
-  return idx < 0 ? "" : rest.slice(0, idx);
-}
 
-function parentDir(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx <= 0 ? "/" : path.slice(0, idx);
-}
 
-function nextDuplicateName(name: string, existing: Set<string>): string {
-  const dot = name.lastIndexOf(".");
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : "";
-  const stripped = base.replace(/ \d+$/, "");
-  for (let n = 1; n < 10_000; n++) {
-    const candidate = `${stripped} ${n}${ext}`;
-    if (!existing.has(candidate)) return candidate;
-  }
-  return `${stripped} copy${ext}`;
-}
 
 function sortEntries(
   entries: NfcEntry[],

@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// One signal block from inside a .ir file.
@@ -44,9 +45,6 @@ pub struct IrEntry {
     pub mtime: Option<u32>,
 }
 
-/// Progress callback fired after each parsed file. `scanned` ≤ `total`.
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Recursively scan `root` for .ir files, parse them, and return the list.
 /// Mirrors [`crate::flipper::subghz::scan_library`] — mtime-based cache
 /// hits skip re-reads over serial.
@@ -56,7 +54,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, IrEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<IrEntry>> {
     let mut paths: Vec<String> = Vec::new();
     walk_dir(client, root, excluded, &mut paths)?;
@@ -90,7 +88,7 @@ pub fn scan_library(
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_ir(path, &name, &text);
         entry.mtime = current_mtime;
         entries.push(entry);
@@ -106,42 +104,21 @@ fn walk_dir(
     excluded: &[String],
     out: &mut Vec<String>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_ir_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".ir")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push(child);
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_ir_extension(name: &str) -> bool {
-    name.len() >= 3 && name[name.len() - 3..].eq_ignore_ascii_case(".ir")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// Parse a .ir file's text body. Signals are separated by a `#` line;
@@ -246,8 +223,17 @@ data: 9042 4502 552 1734
     #[test]
     fn excluded_path_logic() {
         let excluded = vec!["/ext/infrared/private".to_string()];
-        assert!(is_excluded("/ext/infrared/private", &excluded));
-        assert!(is_excluded("/ext/infrared/private/x.ir", &excluded));
-        assert!(!is_excluded("/ext/infrared/public/x.ir", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/infrared/private",
+            &excluded
+        ));
+        assert!(library_walk::is_excluded(
+            "/ext/infrared/private/x.ir",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/infrared/public/x.ir",
+            &excluded
+        ));
     }
 }

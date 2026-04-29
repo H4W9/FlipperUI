@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// Parsed metadata for a single `.nfc` file.
@@ -51,9 +52,6 @@ pub struct NfcEntry {
     pub mtime: Option<u32>,
 }
 
-/// Progress callback fired after each parsed file. `scanned` ≤ `total`.
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Recursively scan `root` for `.nfc` files, parse them, and return the list.
 /// Mirrors [`crate::flipper::infrared::scan_library`] — mtime-based cache
 /// hits skip re-reads over serial.
@@ -63,7 +61,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, NfcEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<NfcEntry>> {
     let mut files: Vec<(String, u32)> = Vec::new();
     walk_dir(client, root, excluded, &mut files)?;
@@ -98,7 +96,7 @@ pub fn scan_library(
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_nfc(path, &name, &text);
         entry.size = *size;
         entry.mtime = current_mtime;
@@ -119,7 +117,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<N
     let mut entries = Vec::with_capacity(paths.len());
 
     for path in paths {
-        if !has_nfc_extension(path) {
+        if !library_walk::has_extension_ci(path, ".nfc") {
             continue;
         }
         let stat = match storage::storage_stat(client, path) {
@@ -143,7 +141,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<N
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_nfc(path, &name, &text);
         entry.size = stat.size;
         entry.mtime = mtime;
@@ -159,42 +157,21 @@ fn walk_dir(
     excluded: &[String],
     out: &mut Vec<(String, u32)>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_nfc_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".nfc")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push((child, f.size));
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_nfc_extension(name: &str) -> bool {
-    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".nfc")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// Parse a `.nfc` file's text header. Stops scanning once we've seen the
@@ -317,18 +294,24 @@ Page 0: 04 01 02 03
 
     #[test]
     fn nfc_extension_match() {
-        assert!(has_nfc_extension("foo.nfc"));
-        assert!(has_nfc_extension("foo.NFC"));
-        assert!(!has_nfc_extension("foo.nf"));
-        assert!(!has_nfc_extension("nfc"));
-        assert!(has_nfc_extension("a.nfc"));
+        assert!(library_walk::has_extension_ci("foo.nfc", ".nfc"));
+        assert!(library_walk::has_extension_ci("foo.NFC", ".nfc"));
+        assert!(!library_walk::has_extension_ci("foo.nf", ".nfc"));
+        assert!(!library_walk::has_extension_ci("nfc", ".nfc"));
+        assert!(library_walk::has_extension_ci("a.nfc", ".nfc"));
     }
 
     #[test]
     fn excluded_path_logic() {
         let excluded = vec!["/ext/nfc/private".to_string()];
-        assert!(is_excluded("/ext/nfc/private", &excluded));
-        assert!(is_excluded("/ext/nfc/private/x.nfc", &excluded));
-        assert!(!is_excluded("/ext/nfc/public/x.nfc", &excluded));
+        assert!(library_walk::is_excluded("/ext/nfc/private", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/nfc/private/x.nfc",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/nfc/public/x.nfc",
+            &excluded
+        ));
     }
 }

@@ -1,6 +1,7 @@
 import { RefreshCw, Search, X, Usb } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { ScanProgressBar } from "../ui/ScanProgressBar";
+import { formatRelative } from "../../lib/format";
 
 interface Props {
   kinds: string[];
@@ -116,12 +117,4 @@ function kindLabel(kind: string): string {
   if (kind === "usb") return "BadUSB";
   if (kind === "kb") return "BadKB";
   return kind;
-}
-
-function formatRelative(ts: number): string {
-  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
 }

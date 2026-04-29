@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// Coordinates extracted from a .sub file (manual annotations or capture-with-GPS plugins).
@@ -46,9 +47,6 @@ pub struct SubGhzEntry {
     pub mtime: Option<u32>,
 }
 
-/// Progress callback fired after each parsed file. `scanned` ≤ `total`.
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Recursively scan `root` for .sub files, parse them, and return the list.
 ///
 /// `excluded` are absolute paths under `root` to skip entirely. `cached` is a
@@ -62,7 +60,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, SubGhzEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<SubGhzEntry>> {
     let mut paths: Vec<String> = Vec::new();
     walk_dir(client, root, excluded, &mut paths)?;
@@ -101,7 +99,7 @@ pub fn scan_library(
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_sub(path, &name, &text);
         entry.mtime = current_mtime;
         entries.push(entry);
@@ -117,43 +115,22 @@ fn walk_dir(
     excluded: &[String],
     out: &mut Vec<String>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         // pb_storage::FileType::Dir = 1 in the firmware enum.
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_sub_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".sub")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push(child);
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_sub_extension(name: &str) -> bool {
-    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".sub")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// Parse a .sub file's text body into a [`SubGhzEntry`].
@@ -328,9 +305,18 @@ TE: 400
     #[test]
     fn excluded_path_logic() {
         let excluded = vec!["/ext/subghz/private".to_string()];
-        assert!(is_excluded("/ext/subghz/private", &excluded));
-        assert!(is_excluded("/ext/subghz/private/x.sub", &excluded));
-        assert!(!is_excluded("/ext/subghz/public/x.sub", &excluded));
-        assert!(!is_excluded("/ext/subghz/private2", &excluded));
+        assert!(library_walk::is_excluded("/ext/subghz/private", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/subghz/private/x.sub",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/subghz/public/x.sub",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/subghz/private2",
+            &excluded
+        ));
     }
 }

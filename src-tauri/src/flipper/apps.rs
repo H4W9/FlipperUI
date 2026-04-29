@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// Metadata for a single `.fap` on the device.
@@ -36,9 +37,6 @@ pub struct AppEntry {
     pub mtime: Option<u32>,
 }
 
-/// Progress callback fired after each discovered file.
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Scan a set of roots for `.fap` files and return a deduped list.
 ///
 /// Dedupe key is the full path — if the same file appears via two
@@ -50,7 +48,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, AppEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<AppEntry>> {
     // Phase 1: walk every root, collecting (path, size, root). We collect
     // first so `total` in progress events is meaningful.
@@ -96,9 +94,9 @@ pub fn scan_library(
             }
         }
 
-        let name = file_basename(&path)
+        let name = library_walk::file_basename(&path)
             .strip_suffix_ignore_case(".fap")
-            .unwrap_or_else(|| file_basename(&path).to_string());
+            .unwrap_or_else(|| library_walk::file_basename(&path).to_string());
         let category = parent_dir_name(&path, &root);
 
         entries.push(AppEntry {
@@ -135,7 +133,7 @@ pub fn parse_paths(
     let mut entries = Vec::with_capacity(paths.len());
 
     for path in paths {
-        if !has_fap_extension(path) {
+        if !library_walk::has_extension_ci(path, ".fap") {
             continue;
         }
         let stat = match storage::storage_stat(client, path) {
@@ -155,9 +153,9 @@ pub fn parse_paths(
         };
 
         let mtime = storage::storage_timestamp(client, path).ok();
-        let name = file_basename(path)
+        let name = library_walk::file_basename(path)
             .strip_suffix_ignore_case(".fap")
-            .unwrap_or_else(|| file_basename(path).to_string());
+            .unwrap_or_else(|| library_walk::file_basename(path).to_string());
         let category = parent_dir_name(path, &root);
 
         entries.push(AppEntry {
@@ -187,7 +185,7 @@ fn walk_dir(
     excluded: &[String],
     out: &mut Vec<(String, u32)>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     // A missing root (user added a nonexistent extra dir) should be
@@ -200,37 +198,16 @@ fn walk_dir(
         }
     };
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_fap_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".fap")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push((child, f.size));
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_fap_extension(name: &str) -> bool {
-    name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".fap")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// The immediate parent directory name, unless the parent *is* the root.
@@ -304,18 +281,24 @@ mod tests {
     #[test]
     fn exclusion_logic() {
         let excluded = vec!["/ext/apps/Debug".to_string()];
-        assert!(is_excluded("/ext/apps/Debug", &excluded));
-        assert!(is_excluded("/ext/apps/Debug/x.fap", &excluded));
-        assert!(!is_excluded("/ext/apps/Debugger", &excluded));
-        assert!(!is_excluded("/ext/apps/Tools/x.fap", &excluded));
+        assert!(library_walk::is_excluded("/ext/apps/Debug", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/apps/Debug/x.fap",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded("/ext/apps/Debugger", &excluded));
+        assert!(!library_walk::is_excluded(
+            "/ext/apps/Tools/x.fap",
+            &excluded
+        ));
     }
 
     #[test]
     fn fap_extension_match() {
-        assert!(has_fap_extension("foo.fap"));
-        assert!(has_fap_extension("foo.FAP"));
-        assert!(!has_fap_extension("foo.txt"));
-        assert!(!has_fap_extension("fap"));
-        assert!(has_fap_extension("a.fap"));
+        assert!(library_walk::has_extension_ci("foo.fap", ".fap"));
+        assert!(library_walk::has_extension_ci("foo.FAP", ".fap"));
+        assert!(!library_walk::has_extension_ci("foo.txt", ".fap"));
+        assert!(!library_walk::has_extension_ci("fap", ".fap"));
+        assert!(library_walk::has_extension_ci("a.fap", ".fap"));
     }
 }

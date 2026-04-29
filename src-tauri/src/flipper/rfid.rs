@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 
 /// Parsed metadata for a single `.rfid` file.
@@ -40,8 +41,6 @@ pub struct RfidEntry {
     pub mtime: Option<u32>,
 }
 
-pub type ScanProgress<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 /// Recursively scan `root` for `.rfid` files, parse them, and return the list.
 /// Mirrors [`crate::flipper::nfc::scan_library`] — mtime-based cache hits skip
 /// re-reads over serial.
@@ -51,7 +50,7 @@ pub fn scan_library(
     excluded: &[String],
     cached: &HashMap<String, RfidEntry>,
     cancelled: &Arc<AtomicBool>,
-    on_progress: ScanProgress,
+    on_progress: library_walk::ScanProgress,
 ) -> Result<Vec<RfidEntry>> {
     let mut files: Vec<(String, u32)> = Vec::new();
     walk_dir(client, root, excluded, &mut files)?;
@@ -86,7 +85,7 @@ pub fn scan_library(
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_rfid(path, &name, &text);
         entry.size = *size;
         entry.mtime = current_mtime;
@@ -103,7 +102,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<R
     let mut entries = Vec::with_capacity(paths.len());
 
     for path in paths {
-        if !has_rfid_extension(path) {
+        if !library_walk::has_extension_ci(path, ".rfid") {
             continue;
         }
         let stat = match storage::storage_stat(client, path) {
@@ -127,7 +126,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<R
         };
 
         let text = String::from_utf8_lossy(&bytes);
-        let name = file_basename(path).to_string();
+        let name = library_walk::file_basename(path).to_string();
         let mut entry = parse_rfid(path, &name, &text);
         entry.size = stat.size;
         entry.mtime = mtime;
@@ -143,42 +142,21 @@ fn walk_dir(
     excluded: &[String],
     out: &mut Vec<(String, u32)>,
 ) -> Result<()> {
-    if is_excluded(dir, excluded) {
+    if library_walk::is_excluded(dir, excluded) {
         return Ok(());
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name);
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
-        } else if has_rfid_extension(&f.name) && !is_excluded(&child, excluded) {
+        } else if library_walk::has_extension_ci(&f.name, ".rfid")
+            && !library_walk::is_excluded(&child, excluded)
+        {
             out.push((child, f.size));
         }
     }
     Ok(())
-}
-
-fn is_excluded(path: &str, excluded: &[String]) -> bool {
-    excluded.iter().any(|ex| {
-        let ex = ex.trim_end_matches('/');
-        path == ex || path.starts_with(&format!("{ex}/"))
-    })
-}
-
-fn has_rfid_extension(name: &str) -> bool {
-    name.len() >= 5 && name[name.len() - 5..].eq_ignore_ascii_case(".rfid")
-}
-
-fn join_path(parent: &str, child: &str) -> String {
-    if parent.ends_with('/') {
-        format!("{parent}{child}")
-    } else {
-        format!("{parent}/{child}")
-    }
-}
-
-fn file_basename(path: &str) -> &str {
-    path.rsplit_once('/').map(|(_, b)| b).unwrap_or(path)
 }
 
 /// Parse an `.rfid` text header. Stops once we've seen the keys we care
@@ -265,18 +243,24 @@ Data: 12 34 56 78 90
 
     #[test]
     fn rfid_extension_match() {
-        assert!(has_rfid_extension("foo.rfid"));
-        assert!(has_rfid_extension("foo.RFID"));
-        assert!(!has_rfid_extension("foo.rfi"));
-        assert!(!has_rfid_extension("rfid"));
-        assert!(has_rfid_extension("a.rfid"));
+        assert!(library_walk::has_extension_ci("foo.rfid", ".rfid"));
+        assert!(library_walk::has_extension_ci("foo.RFID", ".rfid"));
+        assert!(!library_walk::has_extension_ci("foo.rfi", ".rfid"));
+        assert!(!library_walk::has_extension_ci("rfid", ".rfid"));
+        assert!(library_walk::has_extension_ci("a.rfid", ".rfid"));
     }
 
     #[test]
     fn excluded_path_logic() {
         let excluded = vec!["/ext/lfrfid/private".to_string()];
-        assert!(is_excluded("/ext/lfrfid/private", &excluded));
-        assert!(is_excluded("/ext/lfrfid/private/x.rfid", &excluded));
-        assert!(!is_excluded("/ext/lfrfid/public/x.rfid", &excluded));
+        assert!(library_walk::is_excluded("/ext/lfrfid/private", &excluded));
+        assert!(library_walk::is_excluded(
+            "/ext/lfrfid/private/x.rfid",
+            &excluded
+        ));
+        assert!(!library_walk::is_excluded(
+            "/ext/lfrfid/public/x.rfid",
+            &excluded
+        ));
     }
 }
