@@ -380,6 +380,12 @@ function Row({
       <span className="text-right text-secondary tabular-nums">
         {formatSize(entry.size)}
       </span>
+      <span
+        className="text-right text-dim tabular-nums text-[11px]"
+        title={entry.mtime ? new Date(entry.mtime * 1000).toLocaleString() : ""}
+      >
+        {formatMtime(entry.mtime)}
+      </span>
       <div className="flex items-center justify-end gap-0.5">
         <button
           onClick={onLaunch}
@@ -441,6 +447,13 @@ function sortEntries(
 ): AppEntry[] {
   const out = [...entries];
   out.sort((a, b) => {
+    if (key === "mtime") {
+      if (a.mtime == null && b.mtime == null) return 0;
+      if (a.mtime == null) return 1;
+      if (b.mtime == null) return -1;
+      const c = a.mtime - b.mtime;
+      return dir === "asc" ? c : -c;
+    }
     let cmp = 0;
     switch (key) {
       case "name":

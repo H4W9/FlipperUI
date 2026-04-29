@@ -41,8 +41,7 @@ ______________________________
 [ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter in the toolbar
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
 [ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this; libraries don't yet)
-[ ] "recently added" / mtime sort column for every library - the mtime is already captured per entry, just isn't exposed as a sortable column or default sort yet
-[ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query. Needs a design pass before committing — may not survive the header polish task; test placement options first.
+[ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query.
 [ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON file so users can transplant their library index between machines without re-scanning
 [ ] cache file body (or first N KB) in library caches - today entries store only header metadata; caching the body would let BadUSB / SubGhz / IR / NFC previews and detail views work fully offline
 [ ] local↔device folder sync - pick a local folder, mirror it to a Flipper path (or vice-versa), with a diff preview before committing changes
@@ -137,3 +136,4 @@ ______________________________
 [x] drag-drop export from library rows to Finder - already wired via useExportDrag + @crabnebula/tauri-plugin-drag in NFC/IR/BadUSB tables (drop-OUT bug tracked under FIXES/IMPROVEMENTS)
 [x] avoid full library rescan after upload - useLibraryDrop now passes the freshly-written remote paths to onAfterUpload; NfcLibrary and AppLibrary parse only those paths via nfc_parse_paths / apps_parse_paths and merge into existing entries (replace by path) + cache, instead of re-walking the whole library
 [x] RFID library view - 125 kHz .rfid library under /ext/lfrfid, mirroring NFC: rfid::scan_library + parse_paths backed by run_library_scan helper, rfid_scan / rfid_cancel_scan / rfid_parse_paths Tauri commands, per-device rfidCache keyed by hardware UID, RfidLibrary view with virtualized table (Key / Type / Data / Size), search + Key-type filter, drag-drop upload via useLibraryDrop with incremental merge, ExcludedDirsEditor in Settings, SideRail nav + Dashboard tile + CommandPalette entry + tray menu item, all wired through usePreloadLibraries; uses src/assets/icons/125.svg
+[x] "recently added" / mtime sort column for every library - the mtime is already captured per entry, just isn't exposed as a sortable column or default sort yet
