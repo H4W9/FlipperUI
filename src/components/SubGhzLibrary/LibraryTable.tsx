@@ -16,6 +16,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
+import { formatMtime } from "../../lib/format";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveSubghzCache } from "../../lib/subghzCache";
 import type { SubGhzEntry } from "../../types/subghz";
@@ -23,7 +24,7 @@ import type { SubGhzEntry } from "../../types/subghz";
 const ROW_HEIGHT = 46;
 const SUBGHZ_ROOT = "/ext/subghz";
 
-type SortKey = "name" | "frequency" | "protocol" | "modulation";
+type SortKey = "name" | "frequency" | "protocol" | "modulation" | "mtime";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -102,7 +103,7 @@ export function LibraryTable({ entries }: Props) {
   );
 }
 
-const GRID_COLS = "grid-cols-[1fr_110px_140px_120px_70px_170px]";
+const GRID_COLS = "grid-cols-[1fr_110px_140px_120px_70px_100px_170px]";
 
 function HeaderRow({
   sortKey,
@@ -122,6 +123,7 @@ function HeaderRow({
       <HeaderCell label="Protocol" col="protocol" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
       <span className="truncate">Preset</span>
       <HeaderCell label="Mod" col="modulation" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
+      <HeaderCell label="Modified" col="mtime" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} align="right" />
       <span className="text-right">Actions</span>
     </div>
   );
@@ -334,6 +336,12 @@ function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntr
         {shortPreset(entry.preset)}
       </span>
       <span className="text-secondary">{entry.modulation ?? "—"}</span>
+      <span
+        className="text-right text-dim tabular-nums text-[11px]"
+        title={entry.mtime ? new Date(entry.mtime * 1000).toLocaleString() : ""}
+      >
+        {formatMtime(entry.mtime)}
+      </span>
       <div className="flex items-center justify-end gap-0.5">
         {entry.coordinates && (
           <button
@@ -408,6 +416,13 @@ function sortEntries(
 ): SubGhzEntry[] {
   const out = [...entries];
   out.sort((a, b) => {
+    if (key === "mtime") {
+      if (a.mtime == null && b.mtime == null) return 0;
+      if (a.mtime == null) return 1;
+      if (b.mtime == null) return -1;
+      const c = a.mtime - b.mtime;
+      return dir === "asc" ? c : -c;
+    }
     let cmp = 0;
     switch (key) {
       case "name":

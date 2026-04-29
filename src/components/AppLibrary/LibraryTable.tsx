@@ -22,13 +22,14 @@ import {
 import { saveAppsCache } from "../../lib/appsCache";
 import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir } from "../../lib/path";
+import { formatMtime } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
 import { FapIcon } from "./FapIcon";
 import type { AppEntry } from "../../types/apps";
 
 const ROW_HEIGHT = 46;
 
-type SortKey = "name" | "category" | "size";
+type SortKey = "name" | "category" | "size" | "mtime";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -108,7 +109,7 @@ export function LibraryTable({ entries, allEntries }: Props) {
   );
 }
 
-const GRID_COLS = "grid-cols-[32px_1fr_140px_80px_160px]";
+const GRID_COLS = "grid-cols-[32px_1fr_140px_80px_100px_160px]";
 
 function HeaderRow({
   sortKey,
@@ -141,6 +142,14 @@ function HeaderRow({
       <HeaderCell
         label="Size"
         col="size"
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onClick={onHeaderClick}
+        align="right"
+      />
+      <HeaderCell
+        label="Modified"
+        col="mtime"
         sortKey={sortKey}
         sortDir={sortDir}
         onClick={onHeaderClick}

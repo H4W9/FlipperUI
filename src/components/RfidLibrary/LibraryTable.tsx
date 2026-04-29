@@ -23,14 +23,14 @@ import {
 import { saveRfidCache } from "../../lib/rfidCache";
 import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
-import { formatSize } from "../../lib/format";
+import { formatSize, formatMtime } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
 import type { RfidEntry } from "../../types/rfid";
 
 const ROW_HEIGHT = 46;
 const RFID_ROOT = "/ext/lfrfid";
 
-type SortKey = "name" | "type" | "data" | "size";
+type SortKey = "name" | "type" | "data" | "size" | "mtime";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -109,7 +109,7 @@ export function LibraryTable({ entries }: Props) {
   );
 }
 
-const GRID_COLS = "grid-cols-[1fr_140px_220px_80px_190px]";
+const GRID_COLS = "grid-cols-[1fr_140px_220px_80px_100px_190px]";
 
 function HeaderRow({
   sortKey,
@@ -128,6 +128,7 @@ function HeaderRow({
       <HeaderCell label="Type" col="type" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
       <HeaderCell label="Data" col="data" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
       <HeaderCell label="Size" col="size" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} align="right" />
+      <HeaderCell label="Modified" col="mtime" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} align="right" />
       <span className="text-right">Actions</span>
     </div>
   );
@@ -346,6 +347,12 @@ function Row({ entry, allEntries }: { entry: RfidEntry; allEntries: RfidEntry[] 
       <span className="text-right text-dim tabular-nums text-[11px]">
         {formatSize(entry.size)}
       </span>
+      <span
+        className="text-right text-dim tabular-nums text-[11px]"
+        title={entry.mtime ? new Date(entry.mtime * 1000).toLocaleString() : ""}
+      >
+        {formatMtime(entry.mtime)}
+      </span>
       <div className="flex items-center justify-end gap-0.5">
         <button
           onClick={onDownload}
@@ -407,6 +414,13 @@ function sortEntries(
 ): RfidEntry[] {
   const out = [...entries];
   out.sort((a, b) => {
+    if (key === "mtime") {
+      if (a.mtime == null && b.mtime == null) return 0;
+      if (a.mtime == null) return 1;
+      if (b.mtime == null) return -1;
+      const c = a.mtime - b.mtime;
+      return dir === "asc" ? c : -c;
+    }
     let cmp = 0;
     switch (key) {
       case "name":

@@ -24,3 +24,12 @@ export function formatRelative(ts: number): string {
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
+
+/**
+ * Format a library-entry mtime (Unix seconds, possibly null) as a relative-time
+ * label. Returns `"—"` for null/non-finite values.
+ */
+export function formatMtime(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(secs) || secs <= 0) return "—";
+  return formatRelative(secs * 1000);
+}

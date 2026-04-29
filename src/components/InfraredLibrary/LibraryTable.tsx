@@ -13,6 +13,7 @@ import {
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
+import { formatMtime } from "../../lib/format";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveInfraredCache } from "../../lib/infraredCache";
 import type { IrEntry } from "../../types/infrared";
@@ -20,7 +21,7 @@ import type { IrEntry } from "../../types/infrared";
 const ROW_HEIGHT = 46;
 const IR_ROOT = "/ext/infrared";
 
-type SortKey = "name" | "signals" | "protocols";
+type SortKey = "name" | "signals" | "protocols" | "mtime";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -99,7 +100,7 @@ export function LibraryTable({ entries }: Props) {
   );
 }
 
-const GRID_COLS = "grid-cols-[1fr_80px_200px_130px]";
+const GRID_COLS = "grid-cols-[1fr_80px_200px_100px_130px]";
 
 function HeaderRow({
   sortKey,
@@ -117,6 +118,7 @@ function HeaderRow({
       <HeaderCell label="Remote / Folder" col="name" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
       <HeaderCell label="Signals" col="signals" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} align="right" />
       <HeaderCell label="Protocols" col="protocols" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} />
+      <HeaderCell label="Modified" col="mtime" sortKey={sortKey} sortDir={sortDir} onClick={onHeaderClick} align="right" />
       <span className="text-right">Actions</span>
     </div>
   );
@@ -314,6 +316,12 @@ function Row({ entry, allEntries }: { entry: IrEntry; allEntries: IrEntry[] }) {
       <span className="text-secondary truncate" title={protocolsLabel}>
         {protocolsLabel}
       </span>
+      <span
+        className="text-right text-dim tabular-nums text-[11px]"
+        title={entry.mtime ? new Date(entry.mtime * 1000).toLocaleString() : ""}
+      >
+        {formatMtime(entry.mtime)}
+      </span>
       <div className="flex items-center justify-end gap-0.5">
         <button
           onClick={startRename}
@@ -370,6 +378,13 @@ function sortEntries(
 ): IrEntry[] {
   const out = [...entries];
   out.sort((a, b) => {
+    if (key === "mtime") {
+      if (a.mtime == null && b.mtime == null) return 0;
+      if (a.mtime == null) return 1;
+      if (b.mtime == null) return -1;
+      const c = a.mtime - b.mtime;
+      return dir === "asc" ? c : -c;
+    }
     let cmp = 0;
     switch (key) {
       case "name":
