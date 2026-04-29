@@ -7,6 +7,7 @@ import type { DeviceInfo, FileEntry, PortInfo, StorageInfo } from "../types/flip
 import type { SubGhzEntry } from "../types/subghz";
 import type { IrEntry } from "../types/infrared";
 import type { NfcEntry } from "../types/nfc";
+import type { RfidEntry } from "../types/rfid";
 import type { BadUsbEntry } from "../types/badusb";
 import type { AppEntry } from "../types/apps";
 import { getCliCleanupPromise } from "../components/CliPanel/CliPanel";
@@ -309,6 +310,35 @@ export const nfcCancelScan = (): Promise<void> =>
 export const nfcParsePaths = async (paths: string[]): Promise<NfcEntry[]> => {
   await awaitCliCleanup();
   return invoke<NfcEntry[]>("nfc_parse_paths", { paths });
+};
+
+// ── RFID library ────────────────────────────────────────────────────────
+
+/**
+ * Scan a directory recursively for `.rfid` files, parse their headers, and
+ * return the list. Emits "rfid-scan-progress" events as it works.
+ */
+export const rfidScan = async (
+  root: string,
+  excludedDirs: string[],
+  cached?: RfidEntry[],
+): Promise<RfidEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<RfidEntry[]>("rfid_scan", {
+    root,
+    excluded_dirs: excludedDirs,
+    cached: cached ?? null,
+  });
+};
+
+/** Abort an in-progress RFID library scan. */
+export const rfidCancelScan = (): Promise<void> =>
+  invoke<void>("rfid_cancel_scan");
+
+/** Parse only the given `.rfid` paths — no directory walk. */
+export const rfidParsePaths = async (paths: string[]): Promise<RfidEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<RfidEntry[]>("rfid_parse_paths", { paths });
 };
 
 // ── BadUSB library ──────────────────────────────────────────────────────

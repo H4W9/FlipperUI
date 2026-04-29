@@ -10,6 +10,7 @@ import { SettingsPane } from "./components/Settings/SettingsPane";
 import { SubGhzLibrary } from "./components/SubGhzLibrary/SubGhzLibrary";
 import { InfraredLibrary } from "./components/InfraredLibrary/InfraredLibrary";
 import { NfcLibrary } from "./components/NfcLibrary/NfcLibrary";
+import { RfidLibrary } from "./components/RfidLibrary/RfidLibrary";
 import { BadUsbLibrary } from "./components/BadUsbLibrary/BadUsbLibrary";
 import { AppLibrary } from "./components/AppLibrary/AppLibrary";
 import { DeviceInfoView } from "./components/DeviceInfo/DeviceInfoView";
@@ -184,6 +185,7 @@ function ActivePane({
   const subghzCount = useFlipperStore((s) => s.subghzEntries.length);
   const irCount = useFlipperStore((s) => s.irEntries.length);
   const nfcCount = useFlipperStore((s) => s.nfcEntries.length);
+  const rfidCount = useFlipperStore((s) => s.rfidEntries.length);
   const badusbCount = useFlipperStore((s) => s.badusbEntries.length);
 
   if (activeView === "settings") {
@@ -206,6 +208,9 @@ function ActivePane({
   }
   if (activeView === "nfc" && (isConnected || nfcCount > 0)) {
     return <NfcLibrary />;
+  }
+  if (activeView === "rfid" && (isConnected || rfidCount > 0)) {
+    return <RfidLibrary />;
   }
   if (activeView === "badusb" && (isConnected || badusbCount > 0)) {
     return <BadUsbLibrary />;

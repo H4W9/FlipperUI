@@ -35,6 +35,8 @@ pub struct AppState {
     pub apps_scan_cancelled: Arc<AtomicBool>,
     /// Signals an in-progress NFC library scan to abort.
     pub nfc_scan_cancelled: Arc<AtomicBool>,
+    /// Signals an in-progress 125 kHz RFID library scan to abort.
+    pub rfid_scan_cancelled: Arc<AtomicBool>,
     /// Signals an in-progress BadUSB library scan to abort.
     pub badusb_scan_cancelled: Arc<AtomicBool>,
     /// Channel for sending input events through the screen reader thread,
@@ -71,6 +73,7 @@ impl AppState {
             ir_scan_cancelled: Arc::new(AtomicBool::new(false)),
             apps_scan_cancelled: Arc::new(AtomicBool::new(false)),
             nfc_scan_cancelled: Arc::new(AtomicBool::new(false)),
+            rfid_scan_cancelled: Arc::new(AtomicBool::new(false)),
             badusb_scan_cancelled: Arc::new(AtomicBool::new(false)),
             input_event_tx: Arc::new(Mutex::new(None)),
             ble_cancel_tx: Arc::new(Mutex::new(None)),

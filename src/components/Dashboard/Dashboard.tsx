@@ -25,6 +25,7 @@ import transparentFlipper from "../../assets/flipper-zero/FZClearNormal.svg";
 import subghzIconSvg from "../../assets/icons/sub1.svg?raw";
 import infraredIconSvg from "../../assets/icons/infrared.svg?raw";
 import nfcIconSvg from "../../assets/icons/nfc.svg?raw";
+import rfidIconSvg from "../../assets/icons/125.svg?raw";
 import badusbIconSvg from "../../assets/icons/badusb.svg?raw";
 import pluginsIconSvg from "../../assets/icons/plugins.svg?raw";
 
@@ -44,6 +45,7 @@ export function Dashboard() {
   const subghzCount = useFlipperStore((s) => s.subghzEntries.length);
   const irCount = useFlipperStore((s) => s.irEntries.length);
   const nfcCount = useFlipperStore((s) => s.nfcEntries.length);
+  const rfidCount = useFlipperStore((s) => s.rfidEntries.length);
   const badusbCount = useFlipperStore((s) => s.badusbEntries.length);
   const appsCount = useFlipperStore((s) => s.appEntries.length);
 
@@ -197,7 +199,7 @@ export function Dashboard() {
               <Zap size={14} className="text-accent" />
               Libraries
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
               <LibraryStat
                 label="Sub-GHz"
                 count={subghzCount}
@@ -218,6 +220,13 @@ export function Dashboard() {
                 svg={nfcIconSvg}
                 onClick={() => setActiveView("nfc")}
                 disabled={!isConnected && nfcCount === 0}
+              />
+              <LibraryStat
+                label="RFID"
+                count={rfidCount}
+                svg={rfidIconSvg}
+                onClick={() => setActiveView("rfid")}
+                disabled={!isConnected && rfidCount === 0}
               />
               <LibraryStat
                 label="BadUSB"

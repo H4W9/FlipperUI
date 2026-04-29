@@ -10,6 +10,7 @@ pub mod framing;
 pub mod gui;
 pub mod infrared;
 pub mod nfc;
+pub mod rfid;
 pub mod session;
 pub mod storage;
 pub mod subghz;

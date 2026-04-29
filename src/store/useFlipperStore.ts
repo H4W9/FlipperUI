@@ -3,6 +3,7 @@ import type { DeviceInfo, FileEntry, PortInfo } from "../types/flipper";
 import type { ScanProgress, SubGhzEntry } from "../types/subghz";
 import type { IrEntry, IrScanProgress } from "../types/infrared";
 import type { NfcEntry, NfcScanProgress } from "../types/nfc";
+import type { RfidEntry, RfidScanProgress } from "../types/rfid";
 import type { BadUsbEntry, BadUsbScanProgress } from "../types/badusb";
 import type { AppEntry, AppIconEntry, AppScanProgress } from "../types/apps";
 
@@ -12,6 +13,7 @@ export type ActiveView =
   | "subghz"
   | "infrared"
   | "nfc"
+  | "rfid"
   | "badusb"
   | "apps"
   | "info"
@@ -67,6 +69,12 @@ interface FlipperStore {
   nfcProgress: NfcScanProgress | null;
   nfcError: string | null;
 
+  // RFID library (125 kHz)
+  rfidEntries: RfidEntry[];
+  rfidScanning: boolean;
+  rfidProgress: RfidScanProgress | null;
+  rfidError: string | null;
+
   // BadUSB library
   badusbEntries: BadUsbEntry[];
   badusbScanning: boolean;
@@ -110,6 +118,10 @@ interface FlipperStore {
   setNfcScanning: (scanning: boolean) => void;
   setNfcProgress: (progress: NfcScanProgress | null) => void;
   setNfcError: (error: string | null) => void;
+  setRfidEntries: (entries: RfidEntry[]) => void;
+  setRfidScanning: (scanning: boolean) => void;
+  setRfidProgress: (progress: RfidScanProgress | null) => void;
+  setRfidError: (error: string | null) => void;
   setBadUsbEntries: (entries: BadUsbEntry[]) => void;
   setBadUsbScanning: (scanning: boolean) => void;
   setBadUsbProgress: (progress: BadUsbScanProgress | null) => void;
@@ -153,6 +165,10 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   nfcScanning: false,
   nfcProgress: null,
   nfcError: null,
+  rfidEntries: [],
+  rfidScanning: false,
+  rfidProgress: null,
+  rfidError: null,
   badusbEntries: [],
   badusbScanning: false,
   badusbProgress: null,
@@ -196,6 +212,9 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
             nfcScanning: false,
             nfcProgress: null,
             nfcError: null,
+            rfidScanning: false,
+            rfidProgress: null,
+            rfidError: null,
             badusbScanning: false,
             badusbProgress: null,
             badusbError: null,
@@ -234,6 +253,10 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setNfcScanning: (nfcScanning) => set({ nfcScanning }),
   setNfcProgress: (nfcProgress) => set({ nfcProgress }),
   setNfcError: (nfcError) => set({ nfcError }),
+  setRfidEntries: (rfidEntries) => set({ rfidEntries }),
+  setRfidScanning: (rfidScanning) => set({ rfidScanning }),
+  setRfidProgress: (rfidProgress) => set({ rfidProgress }),
+  setRfidError: (rfidError) => set({ rfidError }),
   setBadUsbEntries: (badusbEntries) => set({ badusbEntries }),
   setBadUsbScanning: (badusbScanning) => set({ badusbScanning }),
   setBadUsbProgress: (badusbProgress) => set({ badusbProgress }),

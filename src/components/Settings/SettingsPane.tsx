@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Wrench,
   RadioTower,
+  Radio,
   Tv,
   Nfc,
   Usb,
@@ -51,6 +52,11 @@ export function SettingsPane() {
 
   const onNfcExcludedChange = async (excludedDirs: string[]) => {
     const next = await updateSettings({ nfc: { excludedDirs } });
+    setSettings(next);
+  };
+
+  const onRfidExcludedChange = async (excludedDirs: string[]) => {
+    const next = await updateSettings({ rfid: { excludedDirs } });
     setSettings(next);
   };
 
@@ -217,6 +223,15 @@ export function SettingsPane() {
             value={settings?.nfc.excludedDirs ?? []}
             disabled={!settings}
             onChange={onNfcExcludedChange}
+          />
+        </Section>
+
+        <Section icon={<Radio size={13} />} title="RFID (125 kHz)">
+          <ExcludedDirsEditor
+            rootPath="/ext/lfrfid"
+            value={settings?.rfid.excludedDirs ?? []}
+            disabled={!settings}
+            onChange={onRfidExcludedChange}
           />
         </Section>
 

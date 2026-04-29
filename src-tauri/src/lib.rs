@@ -95,6 +95,9 @@ pub fn build_tray_menu(
     let nav_nfc = MenuItemBuilder::with_id("tray-nav-nfc", "NFC Library")
         .enabled(status.connected)
         .build(app)?;
+    let nav_rfid = MenuItemBuilder::with_id("tray-nav-rfid", "RFID Library")
+        .enabled(status.connected)
+        .build(app)?;
     let nav_badusb = MenuItemBuilder::with_id("tray-nav-badusb", "BadUSB Library")
         .enabled(status.connected)
         .build(app)?;
@@ -108,6 +111,7 @@ pub fn build_tray_menu(
         .item(&nav_subghz)
         .item(&nav_infrared)
         .item(&nav_nfc)
+        .item(&nav_rfid)
         .item(&nav_badusb)
         .item(&nav_apps)
         .separator()
@@ -384,6 +388,9 @@ pub fn run() {
             commands::nfc::nfc_scan,
             commands::nfc::nfc_cancel_scan,
             commands::nfc::nfc_parse_paths,
+            commands::rfid::rfid_scan,
+            commands::rfid::rfid_cancel_scan,
+            commands::rfid::rfid_parse_paths,
             commands::badusb::badusb_scan,
             commands::badusb::badusb_cancel_scan,
             commands::apps::apps_scan,

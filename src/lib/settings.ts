@@ -23,6 +23,10 @@ export interface AppSettings {
     /** Absolute Flipper paths excluded from the NFC library scan. */
     excludedDirs: string[];
   };
+  rfid: {
+    /** Absolute Flipper paths excluded from the 125 kHz RFID library scan. */
+    excludedDirs: string[];
+  };
   badusb: {
     /** Absolute Flipper paths excluded from the BadUSB library scan. */
     excludedDirs: string[];
@@ -59,6 +63,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   subghz: { excludedDirs: [] },
   infrared: { excludedDirs: [] },
   nfc: { excludedDirs: [] },
+  rfid: { excludedDirs: [] },
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
@@ -74,6 +79,9 @@ export type SettingsPatch = {
     excludedDirs?: string[];
   };
   nfc?: {
+    excludedDirs?: string[];
+  };
+  rfid?: {
     excludedDirs?: string[];
   };
   badusb?: {
@@ -126,6 +134,9 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
     },
     nfc: {
       excludedDirs: patch.nfc?.excludedDirs ?? current.nfc.excludedDirs,
+    },
+    rfid: {
+      excludedDirs: patch.rfid?.excludedDirs ?? current.rfid.excludedDirs,
     },
     badusb: {
       excludedDirs: patch.badusb?.excludedDirs ?? current.badusb.excludedDirs,
@@ -183,6 +194,10 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
     nfc: {
       excludedDirs:
         raw.nfc?.excludedDirs ?? DEFAULT_SETTINGS.nfc.excludedDirs,
+    },
+    rfid: {
+      excludedDirs:
+        raw.rfid?.excludedDirs ?? DEFAULT_SETTINGS.rfid.excludedDirs,
     },
     badusb: {
       excludedDirs:

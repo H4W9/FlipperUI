@@ -11,6 +11,7 @@ import { FlipperSvgIcon } from "../ui/FlipperSvgIcon";
 import subghzIconSvg from "../../assets/icons/sub1.svg?raw";
 import infraredIconSvg from "../../assets/icons/infrared.svg?raw";
 import nfcIconSvg from "../../assets/icons/nfc.svg?raw";
+import rfidIconSvg from "../../assets/icons/125.svg?raw";
 import pluginsIconSvg from "../../assets/icons/plugins.svg?raw";
 import settingsIconSvg from "../../assets/icons/settings.svg?raw";
 import badusbIconSvg from "../../assets/icons/badusb.svg?raw";
@@ -34,7 +35,7 @@ interface RailItem {
    * If true, the item stays enabled while disconnected as long as its cached
    * library has at least one entry — the view is browsable offline.
    */
-  browsableOffline?: "subghz" | "infrared" | "nfc" | "badusb";
+  browsableOffline?: "subghz" | "infrared" | "nfc" | "rfid" | "badusb";
   /** Additionally disabled while the active transport is BLE. */
   disabledOnBle?: boolean;
 }
@@ -46,6 +47,7 @@ const TOP_ITEMS: RailItem[] = [
   { view: "subghz", label: "Sub-GHz", Icon: flipperIcon(subghzIconSvg, "subghz"), requiresConnection: true, browsableOffline: "subghz" },
   { view: "infrared", label: "Infrared", Icon: flipperIcon(infraredIconSvg, "infrared"), requiresConnection: true, browsableOffline: "infrared" },
   { view: "nfc", label: "NFC", Icon: flipperIcon(nfcIconSvg, "nfc"), requiresConnection: true, browsableOffline: "nfc" },
+  { view: "rfid", label: "RFID", Icon: flipperIcon(rfidIconSvg, "rfid"), requiresConnection: true, browsableOffline: "rfid" },
   { view: "badusb", label: "BadUSB", Icon: flipperIcon(badusbIconSvg, "badusb"), requiresConnection: true, browsableOffline: "badusb" },
   { view: "screen", label: "Screen", Icon: Monitor, requiresConnection: true },
   { view: "cli", label: "Terminal", Icon: Terminal, requiresConnection: true, disabledOnBle: true },
@@ -64,6 +66,7 @@ export function SideRail() {
   const subghzCount = useFlipperStore((s) => s.subghzEntries.length);
   const irCount = useFlipperStore((s) => s.irEntries.length);
   const nfcCount = useFlipperStore((s) => s.nfcEntries.length);
+  const rfidCount = useFlipperStore((s) => s.rfidEntries.length);
   const badusbCount = useFlipperStore((s) => s.badusbEntries.length);
   const [expanded, setExpanded] = useState(false);
 
@@ -71,6 +74,7 @@ export function SideRail() {
     if (kind === "subghz") return subghzCount > 0;
     if (kind === "infrared") return irCount > 0;
     if (kind === "nfc") return nfcCount > 0;
+    if (kind === "rfid") return rfidCount > 0;
     return badusbCount > 0;
   };
 

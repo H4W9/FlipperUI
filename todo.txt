@@ -31,29 +31,24 @@ ______________________________
 --- META ---
 
 --- FIXES / IMPROVEMENTS ---
-[ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens
-[ ] live screen viewer thumbnail in the dashboard - tiny preview of the Flipper screen so you don't have to open the full overlay just to see what's on the device
-[ ] BLE auto-reconnect on connection break/failure
-[ ] fix drag-out from library rows to Finder - useExportDrag (NFC/IR/BadUSB) silently no-ops on macOS. drop-IN works, drop-OUT doesn't. likely cause: @crabnebula/tauri-plugin-drag startDrag must run synchronously inside dragstart, but we read the file from the Flipper async first; by the time startDrag is invoked the dragstart has already concluded and the OS never opens an NSDraggingSession. attempted prefetch-on-hover fix didn't resolve - needs deeper plugin investigation (maybe set effectAllowed earlier, or pre-populate temp file at row mount, or replace plugin)
+[ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens. Goal: device header should never wrap or clip on a 800px-wide window; the most-relevant chip (battery / signal) stays visible, the rest collapse into a "•••" popover.
+[ ] fix drag-out from library rows to Finder - useExportDrag (NFC/IR/BadUSB) silently no-ops on macOS. Drop-IN works, drop-OUT doesn't. Root cause: @crabnebula/tauri-plugin-drag's startDrag must be invoked synchronously inside the dragstart event, but we read the file off the Flipper asynchronously first — by the time startDrag is called the dragstart has already concluded and the OS never opens an NSDraggingSession. Attempted prefetch-on-hover fix did not resolve. Next directions to try: (1) pre-populate the temp file at row mount instead of on hover so it's always ready by dragstart, (2) set effectAllowed before startDrag, (3) replace @crabnebula/tauri-plugin-drag with a different mechanism (native Tauri drag or alternate plugin).
 
 --- ASSETS ---
 
 --- NEW FEATURES ---
-[ ] add notifications for Library-Scans finished etc.
-[ ] local↔device folder sync - pick a local folder, mirror it to a device path (or vice-versa), with a diff preview before committing
+[ ] OS-level notifications for finished library scans / completed transfers / device disconnects, using tauri-plugin-notification. Should respect a Settings toggle so users who don't want them can turn them off.
+[ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter in the toolbar
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
-[ ] add RFID Library - same as NFC-Library but showing all 125khZ RFID files etc.
-[ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this)
-[ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter
-[ ] library "recently added" / mtime sort column - mtime is already captured in every library, just not exposed as a sort option
-[ ] drag-drop export from library rows to Finder - reuse @crabnebula/tauri-plugin-drag already wired in File Browser
-[ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query. needs a design pass to check it doesn't crowd the header; may need to test a few placements before committing
-[ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON so users can transplant their library index between machines without re-scanning
-[ ] cache script / signal text in library caches - currently entries store metadata only; storing the file body (or first N KB) would let BadUSB / SubGhz / IR / NFC previews work fully offline
+[ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this; libraries don't yet)
+[ ] "recently added" / mtime sort column for every library - the mtime is already captured per entry, just isn't exposed as a sortable column or default sort yet
+[ ] global search bar - top-right of app window, matches across subghz / ir / nfc / badusb / apps / files in one query. Needs a design pass before committing — may not survive the header polish task; test placement options first.
+[ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON file so users can transplant their library index between machines without re-scanning
+[ ] cache file body (or first N KB) in library caches - today entries store only header metadata; caching the body would let BadUSB / SubGhz / IR / NFC previews and detail views work fully offline
+[ ] local↔device folder sync - pick a local folder, mirror it to a Flipper path (or vice-versa), with a diff preview before committing changes
 
 --- SUBGHZ ---
-[ ] subghz library cache + background re-scan - persist scanned entries via tauri-plugin-store keyed by device UID, render cache instantly on view open, only re-read files whose mtime changed
-[ ] finish subghz one-click replay TX - currently disabled. needs correct RPC sequence (AppStart + LoadFile + ButtonPress or a variant). stock firmware's Sub-GHz app main-menu scene doesn't register an RPC callback, and launching with a file path args preloads the Transmitter scene but ButtonPress didn't trigger TX. try: launching with empty args + LoadFile + ButtonPress("send"); or the "Sub-GHz RPC" variant if firmware exposes it
+[ ] finish subghz one-click replay TX - currently disabled. Needs the correct RPC sequence (AppStart + LoadFile + ButtonPress or a variant). Stock firmware's Sub-GHz app main-menu scene doesn't register an RPC callback, and launching with a file path arg preloads the Transmitter scene but ButtonPress didn't trigger TX. Things to try next: launching with empty args + LoadFile + ButtonPress("send"); or the "Sub-GHz RPC" app variant if firmware exposes it.
 
 
 -- EASY --
@@ -137,3 +132,8 @@ ______________________________
 [x] strip /dev/ prefix from port labels in the DevicePanel port selector — display only (value still uses full path so the backend connect call is unchanged)
 [x] BLE keep-scanning / live-discovery mode — added start_ble_scan/stop_ble_scan Tauri commands that pump a btleplug events stream and emit "ble-scan-device" events as Flipper peripherals are seen (DeviceDiscovered + DeviceUpdated, plus replay of cached peripherals). BleDialog now subscribes to the live events, dedupes by id (merging RSSI/paired updates), and runs until the user clicks Stop or closes the dialog. AppState gained a ble_scan_active AtomicBool guarding against double-starts.
 [x] change default app-window-height to match dashboard-content (default-height should be a little less than it it currently)
+[x] BLE auto-reconnect on connection break/failure - on flipper-disconnected, schedule a reconnect against the last-used transport (BLE id or USB port from settings.connection) with exponential backoff (1s → 2s → 4s → 8s → 10s cap) and a 5-attempt budget; manual disconnects skip the retry path
+[x] subghz library cache + background re-scan - per-device-UID cache via tauri-plugin-store, instant render on view open, mtime-aware re-scan skips unchanged files
+[x] drag-drop export from library rows to Finder - already wired via useExportDrag + @crabnebula/tauri-plugin-drag in NFC/IR/BadUSB tables (drop-OUT bug tracked under FIXES/IMPROVEMENTS)
+[x] avoid full library rescan after upload - useLibraryDrop now passes the freshly-written remote paths to onAfterUpload; NfcLibrary and AppLibrary parse only those paths via nfc_parse_paths / apps_parse_paths and merge into existing entries (replace by path) + cache, instead of re-walking the whole library
+[x] RFID library view - 125 kHz .rfid library under /ext/lfrfid, mirroring NFC: rfid::scan_library + parse_paths backed by run_library_scan helper, rfid_scan / rfid_cancel_scan / rfid_parse_paths Tauri commands, per-device rfidCache keyed by hardware UID, RfidLibrary view with virtualized table (Key / Type / Data / Size), search + Key-type filter, drag-drop upload via useLibraryDrop with incremental merge, ExcludedDirsEditor in Settings, SideRail nav + Dashboard tile + CommandPalette entry + tray menu item, all wired through usePreloadLibraries; uses src/assets/icons/125.svg

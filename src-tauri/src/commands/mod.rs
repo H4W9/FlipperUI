@@ -8,6 +8,7 @@ pub mod gui;
 pub mod infrared;
 pub mod library_scan;
 pub mod nfc;
+pub mod rfid;
 pub mod storage;
 pub mod subghz;
 pub mod tray;
