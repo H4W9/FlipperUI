@@ -7,7 +7,6 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
 import { cancelTransfer } from "../../lib/tauri";
 import { ProgressBar } from "../ui/ProgressBar";
-import { ErrorBanner } from "../ui/ErrorBanner";
 import { Upload } from "lucide-react";
 
 export function FileBrowser() {
@@ -98,7 +97,6 @@ export function FileBrowser() {
 
   return (
     <div className="flex flex-col h-full relative">
-      <ErrorBanner />
       <BreadcrumbBar />
       <Toolbar />
       <FileList />

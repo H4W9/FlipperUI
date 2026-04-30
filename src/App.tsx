@@ -21,6 +21,7 @@ import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
 import { loadSettings } from "./lib/settings";
 import { usePreloadLibraries } from "./hooks/usePreloadLibraries";
 import flipperOutlineUrl from "./assets/flipper-outline.svg";
+import { ErrorBanner } from "./components/ui/ErrorBanner";
 
 export default function App() {
   const activeView = useFlipperStore((s) => s.activeView);
@@ -168,6 +169,7 @@ export default function App() {
       <SideRail />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <DevicePanel />
+        <ErrorBanner />
         <ActivePane activeView={activeView} isConnected={isConnected} />
       </div>
       <CommandPalette />

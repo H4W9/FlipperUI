@@ -437,7 +437,7 @@ export function DevicePanel() {
           value={selectedPort ?? ""}
           onChange={(e) => handleSelectPort(e.target.value || null)}
           disabled={isConnected || isConnecting}
-          className="bg-surface text-primary text-sm border border-elevated rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-accent"
+          className="max-w-[100px] bg-surface text-primary text-sm border border-elevated rounded px-2 py-1 disabled:opacity-50 focus:outline-none focus:border-accent"
         >
           <option value="">Select port…</option>
           {ports.map((p) => (
