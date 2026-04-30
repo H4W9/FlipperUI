@@ -290,8 +290,20 @@ export function GlobalSearch() {
 
   return (
     <div ref={containerRef} className="relative">
-      {expanded ? (
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-28">
+      <button
+        type="button"
+        onClick={expand}
+        aria-label="Search"
+        title="Search (⌘F)"
+        className={`flex items-center justify-center p-1.5 rounded text-muted hover:text-primary hover:bg-surface transition-colors ${
+          expanded ? "invisible" : ""
+        }`}
+      >
+        <Search size={14} />
+      </button>
+
+      {expanded && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-48 shadow-lg">
           <Search size={13} className="text-muted shrink-0" />
           <input
             ref={inputRef}
@@ -310,16 +322,6 @@ export function GlobalSearch() {
             className="flex-1 min-w-0 bg-transparent text-xs text-primary placeholder:text-muted outline-none"
           />
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={expand}
-          aria-label="Search"
-          title="Search (⌘F)"
-          className="flex items-center justify-center p-1.5 rounded text-muted hover:text-primary hover:bg-surface transition-colors"
-        >
-          <Search size={14} />
-        </button>
       )}
 
       {expanded && open && query && (
