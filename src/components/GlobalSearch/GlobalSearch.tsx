@@ -42,19 +42,40 @@ export function GlobalSearch() {
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Close the dropdown on click-outside or Escape.
+  const expand = () => {
+    setExpanded(true);
+    // Defer focus to next tick so the input is mounted before we focus it.
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  };
+
+  const collapse = () => {
+    setOpen(false);
+    setExpanded(false);
+    setQuery("");
+    inputRef.current?.blur();
+  };
+
+  // Close the dropdown on click-outside or Escape, and collapse the input if
+  // it's empty so the header reclaims the space.
   useEffect(() => {
-    if (!open) return;
+    if (!open && !expanded) return;
     const onDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+        if (!query) setExpanded(false);
+      }
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
-  }, [open]);
+  }, [open, expanded, query]);
 
   // Cmd/Ctrl+F focuses the global search bar (matches the user's mental model
   // of "find" without colliding with ⌘K which opens the command palette).
@@ -62,14 +83,13 @@ export function GlobalSearch() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-        setOpen(true);
+        expand();
+        if (query) setOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [query]);
 
   const results = useMemo<SearchHit[]>(() => {
     const q = query.trim().toLowerCase();
@@ -245,9 +265,7 @@ export function GlobalSearch() {
       setActiveView(hit.view);
       setInjection({ view: hit.view, query });
     }
-    setOpen(false);
-    setQuery("");
-    inputRef.current?.blur();
+    collapse();
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -266,36 +284,45 @@ export function GlobalSearch() {
         select(hit);
       }
     } else if (e.key === "Escape") {
-      setOpen(false);
-      inputRef.current?.blur();
+      collapse();
     }
   };
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-1 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-28">
-        <Search size={13} className="text-muted shrink-0" />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-            setActiveIdx(0);
-          }}
-          onFocus={() => query && setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder="Search…"
-          className="flex-1 min-w-0 bg-transparent text-xs text-primary placeholder:text-muted outline-none"
-        />
-        {!query && (
-          <kbd className="hidden md:inline-block text-[9px] text-muted border border-elevated rounded px-1 py-0">
-            ⌘F
-          </kbd>
-        )}
-      </div>
+      {expanded ? (
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-28">
+          <Search size={13} className="text-muted shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+              setActiveIdx(0);
+            }}
+            onFocus={() => query && setOpen(true)}
+            onBlur={() => {
+              if (!query) setExpanded(false);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder="Search…"
+            className="flex-1 min-w-0 bg-transparent text-xs text-primary placeholder:text-muted outline-none"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={expand}
+          aria-label="Search"
+          title="Search (⌘F)"
+          className="flex items-center justify-center p-1.5 rounded text-muted hover:text-primary hover:bg-surface transition-colors"
+        >
+          <Search size={14} />
+        </button>
+      )}
 
-      {open && query && (
+      {expanded && open && query && (
         <div className="absolute right-0 top-full mt-1 w-[min(420px,80vw)] max-h-[60vh] overflow-y-auto bg-panel border border-border-subtle rounded-lg shadow-2xl z-50">
           {results.length === 0 ? (
             <div className="px-3 py-4 text-center text-xs text-dim">
