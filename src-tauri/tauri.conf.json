@@ -15,7 +15,7 @@
         "label": "main",
         "title": "FlipperUI",
         "width": 1024,
-        "height": 610,
+        "height": 615,
         "minWidth": 700,
         "minHeight": 500,
         "resizable": true,
