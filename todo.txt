@@ -51,6 +51,7 @@ ______________________________
 
 -- EASY --
 [ ] redo README.md with all new features and screenshots
+[ ] enable dark-mode for menu-bar in windows
 
 
 ______________________________

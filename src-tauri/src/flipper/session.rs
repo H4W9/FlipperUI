@@ -13,46 +13,91 @@ const SESSION_CMD: &[u8] = b"start_rpc_session\r";
 
 /// Open a serial port, perform the RPC session handshake, and return a connected client.
 pub fn open_session(port_name: &str) -> Result<FlipperClient> {
-    let port = serialport::new(port_name, 230400)
+    tracing::info!(port = %port_name, "open_session: opening serial port @230400");
+    let mut port = serialport::new(port_name, 230400)
         .timeout(SERIAL_TIMEOUT_DRAIN)
-        .open()?;
+        .open()
+        .map_err(|e| {
+            tracing::warn!(port = %port_name, error = %e, "open_session: serial open failed");
+            e
+        })?;
+
+    // Windows' usbser.sys doesn't auto-assert DTR/RTS on open, and the Flipper
+    // firmware gates the CLI on DTR — without this the `start_rpc_session\r`
+    // write completes but no ack ever comes back and the read times out as
+    // OS error 121 (ERROR_SEM_TIMEOUT). macOS/Linux don't need this but the
+    // call is harmless there. Both lines are best-effort: log on failure and
+    // keep going, since some virtual COM stacks reject these calls outright.
+    if let Err(e) = port.write_data_terminal_ready(true) {
+        tracing::warn!(port = %port_name, error = %e, "open_session: DTR assert failed (continuing)");
+    }
+    if let Err(e) = port.write_request_to_send(true) {
+        tracing::warn!(port = %port_name, error = %e, "open_session: RTS assert failed (continuing)");
+    }
 
     let mut transport: Box<dyn crate::flipper::transport::Transport> =
         Box::new(SerialTransport::new(port));
 
     // Drain any pending CLI text (prompt, log lines, etc.)
     let mut drain_buf = [0u8; 256];
+    let mut drained = 0usize;
     loop {
         match transport.read(&mut drain_buf) {
             Ok(0) | Err(_) => break,
-            Ok(_) => {}
+            Ok(n) => drained += n,
         }
     }
+    tracing::info!(port = %port_name, drained, "open_session: drained pre-session bytes");
 
     // Switch to normal timeout for the session handshake
-    transport.set_timeout(SERIAL_TIMEOUT_NORMAL)?;
+    transport.set_timeout(SERIAL_TIMEOUT_NORMAL).map_err(|e| {
+        tracing::warn!(port = %port_name, error = %e, "open_session: set_timeout failed");
+        e
+    })?;
 
     // Send RPC session start command (CR only — the Flipper CLI expects \r not \r\n)
-    transport.write_all(SESSION_CMD)?;
-    transport.flush()?;
+    transport.write_all(SESSION_CMD).map_err(|e| {
+        tracing::warn!(port = %port_name, error = %e, raw_os = ?e.raw_os_error(), "open_session: write SESSION_CMD failed");
+        e
+    })?;
+    transport.flush().map_err(|e| {
+        tracing::warn!(port = %port_name, error = %e, raw_os = ?e.raw_os_error(), "open_session: flush after SESSION_CMD failed");
+        e
+    })?;
+    tracing::info!(port = %port_name, "open_session: sent start_rpc_session, awaiting ack");
 
     // Wait for the device to acknowledge with a newline.
     // The transport already has SERIAL_TIMEOUT_NORMAL set, so read() will return
     // TimedOut if no bytes arrive within 5 seconds — no manual deadline needed.
+    // Windows surfaces the same condition as ERROR_SEM_TIMEOUT (OS error 121),
+    // which Rust's std doesn't map to ErrorKind::TimedOut, so we treat it as a
+    // timeout explicitly.
     let mut byte = [0u8; 1];
     loop {
         match transport.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
             Ok(_) => {} // consume echoed characters, \r, etc.
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::TimedOut
+                    || e.raw_os_error() == Some(121) =>
+            {
+                tracing::warn!(
+                    port = %port_name,
+                    raw_os = ?e.raw_os_error(),
+                    "open_session: timed out waiting for RPC session ack",
+                );
                 return Err(FlipperError::Session(
                     "Timed out waiting for RPC session acknowledgment".into(),
                 ));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                tracing::warn!(port = %port_name, error = %e, raw_os = ?e.raw_os_error(), "open_session: read error during ack");
+                return Err(e.into());
+            }
         }
     }
 
+    tracing::info!(port = %port_name, "open_session: RPC session established");
     Ok(FlipperClient::new(transport))
 }
 

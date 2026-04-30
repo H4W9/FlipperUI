@@ -116,9 +116,22 @@ pub async fn connect(port: String, state: State<'_, AppState>) -> Result<DeviceI
         // Drop any existing connection first
         *guard = None;
 
-        let mut client = session::open_session(&port)?;
+        tracing::info!(%port, "connect: starting RPC session");
+        let mut client = match session::open_session(&port) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(%port, error = %e, "connect: open_session failed");
+                return Err(e);
+            }
+        };
         let info_map = session::get_device_info(&mut client).unwrap_or_default();
         *guard = Some(client);
+        tracing::info!(
+            %port,
+            hardware = info_map.get("hardware_name").map(|s| s.as_str()).unwrap_or("?"),
+            firmware = info_map.get("software_version").map(|s| s.as_str()).unwrap_or("?"),
+            "connect: connected",
+        );
 
         Ok(DeviceInfo {
             port,
