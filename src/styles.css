@@ -19,6 +19,7 @@
   --color-accent-hover: #f97316; /* orange-500 */
   --color-accent-dim: #ea580c;  /* orange-600 */
   --color-danger: #f87171;      /* red-400 */
+  --color-warning: #facc15;     /* yellow-400 */
   --color-success: #4ade80;     /* green-400 */
 }
 

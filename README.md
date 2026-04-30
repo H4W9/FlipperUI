@@ -2,7 +2,7 @@
 
 A fast, lightweight qFlipper alternative for the Flipper Zero. Built with Tauri v2 — native Rust backend, React frontend, ~15 MB installer.
 
-![version](https://img.shields.io/badge/version-0.3.0-FF8300)
+![version](https://img.shields.io/badge/version-0.3.3-FF8300)
 ![license](https://img.shields.io/badge/license-TBD-lightgrey)
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)
 

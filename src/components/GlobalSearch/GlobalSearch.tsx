@@ -273,7 +273,7 @@ export function GlobalSearch() {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-30">
+      <div className="flex items-center gap-1 px-2 py-1 rounded bg-surface border border-elevated focus-within:border-accent transition-colors w-28">
         <Search size={13} className="text-muted shrink-0" />
         <input
           ref={inputRef}
