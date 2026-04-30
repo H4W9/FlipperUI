@@ -5,6 +5,7 @@ import {
   Radio,
   Search,
   Usb,
+  X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -321,6 +322,17 @@ export function GlobalSearch() {
             placeholder="Search…"
             className="flex-1 min-w-0 bg-transparent text-xs text-primary placeholder:text-muted outline-none"
           />
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              collapse();
+            }}
+            aria-label="Close search"
+            className="shrink-0 text-muted hover:text-primary transition-colors"
+          >
+            <X size={13} />
+          </button>
         </div>
       )}
 
