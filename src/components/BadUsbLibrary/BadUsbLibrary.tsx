@@ -35,6 +35,16 @@ export function BadUsbLibrary() {
     return subscribeSettings((s) => setExcludedDirs(s.badusb.excludedDirs));
   }, []);
 
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "badusb") {
+      setQuery(injection.query);
+      setKindFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<BadUsbScanProgress>("badusb-scan-progress", (e) =>

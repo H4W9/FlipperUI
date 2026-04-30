@@ -11,6 +11,7 @@ import {
   Trash2,
   Check,
   X,
+  Star,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useFlipperStore } from "../../store/useFlipperStore";
@@ -29,9 +30,11 @@ type SortDir = "asc" | "desc";
 
 interface Props {
   entries: SubGhzEntry[];
+  favorites: Set<string>;
+  onToggleFavorite: (path: string) => void;
 }
 
-export function LibraryTable({ entries }: Props) {
+export function LibraryTable({ entries, favorites, onToggleFavorite }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -93,7 +96,12 @@ export function LibraryTable({ entries }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={entries} />
+                <Row
+                  entry={entry}
+                  allEntries={entries}
+                  starred={favorites.has(entry.path)}
+                  onToggleFavorite={onToggleFavorite}
+                />
               </div>
             );
           })}
@@ -158,7 +166,17 @@ function HeaderCell({
   );
 }
 
-function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntry[] }) {
+function Row({
+  entry,
+  allEntries,
+  starred,
+  onToggleFavorite,
+}: {
+  entry: SubGhzEntry;
+  allEntries: SubGhzEntry[];
+  starred: boolean;
+  onToggleFavorite: (path: string) => void;
+}) {
   const setError = useFlipperStore((s) => s.setSubghzError);
   const setEntries = useFlipperStore((s) => s.setSubghzEntries);
   const deviceUid = useFlipperStore((s) => s.deviceInfo?.hardware_uid ?? null);
@@ -274,7 +292,7 @@ function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntr
 
   return (
     <div
-      className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
+      className={`group grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
       draggable={!renaming}
       onDragStart={handleDragStart}
     >
@@ -343,6 +361,19 @@ function Row({ entry, allEntries }: { entry: SubGhzEntry; allEntries: SubGhzEntr
         {formatMtime(entry.mtime)}
       </span>
       <div className="flex items-center justify-end gap-0.5">
+        <button
+          onClick={() => onToggleFavorite(entry.path)}
+          title={starred ? "Unstar" : "Star"}
+          aria-label={starred ? "Unstar" : "Star"}
+          aria-pressed={starred}
+          className={`p-1 rounded transition-all ${
+            starred
+              ? "text-accent opacity-100"
+              : "text-muted opacity-0 group-hover:opacity-100 hover:text-accent focus:opacity-100"
+          }`}
+        >
+          <Star size={13} className={starred ? "fill-accent" : ""} />
+        </button>
         {entry.coordinates && (
           <button
             onClick={onMaps}

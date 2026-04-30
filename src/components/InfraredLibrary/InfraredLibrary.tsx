@@ -32,6 +32,16 @@ export function InfraredLibrary() {
     return subscribeSettings((s) => setExcludedDirs(s.infrared.excludedDirs));
   }, []);
 
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "infrared") {
+      setQuery(injection.query);
+      setProtocolFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<IrScanProgress>("infrared-scan-progress", (e) =>

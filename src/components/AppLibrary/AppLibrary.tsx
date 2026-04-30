@@ -52,6 +52,16 @@ export function AppLibrary() {
     });
   }, []);
 
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "apps") {
+      setQuery(injection.query);
+      setCategoryFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<AppScanProgress>("apps-scan-progress", (e) =>

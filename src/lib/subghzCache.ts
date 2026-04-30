@@ -19,6 +19,8 @@ const STORE_FILE = "subghz-cache.json";
 interface DeviceCache {
   scannedAt: number;
   entries: SubGhzEntry[];
+  /** Starred entry paths. Survives re-scans. */
+  favorites?: string[];
 }
 
 type CacheMap = Record<string, DeviceCache>;
@@ -40,13 +42,33 @@ export async function loadSubghzCache(uid: string): Promise<DeviceCache | null> 
   return all[uid] ?? null;
 }
 
-/** Persist scan results for the given device UID. */
+/** Persist scan results for the given device UID. Preserves favorites. */
 export async function saveSubghzCache(
   uid: string,
   entries: SubGhzEntry[],
 ): Promise<void> {
   const all = await readAll();
-  all[uid] = { scannedAt: Date.now(), entries };
+  const prev = all[uid];
+  all[uid] = {
+    scannedAt: Date.now(),
+    entries,
+    favorites: prev?.favorites ?? [],
+  };
+  await store.set(ROOT_KEY, all);
+}
+
+/** Persist favorites for the given device UID. Preserves entries/scannedAt. */
+export async function saveSubghzFavorites(
+  uid: string,
+  favorites: string[],
+): Promise<void> {
+  const all = await readAll();
+  const prev = all[uid];
+  all[uid] = {
+    scannedAt: prev?.scannedAt ?? 0,
+    entries: prev?.entries ?? [],
+    favorites,
+  };
   await store.set(ROOT_KEY, all);
 }
 

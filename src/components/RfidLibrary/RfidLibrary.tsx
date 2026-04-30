@@ -35,6 +35,16 @@ export function RfidLibrary() {
     return subscribeSettings((s) => setExcludedDirs(s.rfid.excludedDirs));
   }, []);
 
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "rfid") {
+      setQuery(injection.query);
+      setKeyTypeFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<RfidScanProgress>("rfid-scan-progress", (e) =>

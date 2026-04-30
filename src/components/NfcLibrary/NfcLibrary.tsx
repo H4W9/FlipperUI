@@ -34,6 +34,20 @@ export function NfcLibrary() {
     return subscribeSettings((s) => setExcludedDirs(s.nfc.excludedDirs));
   }, []);
 
+  // Pull in any pending GlobalSearch query targeted at this view, then clear
+  // it so the next mount / next search doesn't re-apply a stale filter.
+  // Subscribed (rather than mount-only) so re-selecting a result while already
+  // on this view still applies the new query.
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "nfc") {
+      setQuery(injection.query);
+      setDeviceTypeFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<NfcScanProgress>("nfc-scan-progress", (e) =>

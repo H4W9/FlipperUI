@@ -1,4 +1,4 @@
-import { RefreshCw, Search, X, RadioTower } from "lucide-react";
+import { RefreshCw, Search, X, RadioTower, Star } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { ScanProgressBar } from "../ui/ScanProgressBar";
 import { formatRelative } from "../../lib/format";
@@ -16,6 +16,9 @@ interface Props {
   /** ms timestamp of the last successful scan (from on-disk cache), or null. */
   lastScannedAt: number | null;
   isConnected: boolean;
+  starredOnly: boolean;
+  onStarredOnlyChange: (v: boolean) => void;
+  favoritesCount: number;
 }
 
 export function LibraryToolbar({
@@ -30,6 +33,9 @@ export function LibraryToolbar({
   filtered,
   lastScannedAt,
   isConnected,
+  starredOnly,
+  onStarredOnlyChange,
+  favoritesCount,
 }: Props) {
   const scanning = useFlipperStore((s) => s.subghzScanning);
   const progress = useFlipperStore((s) => s.subghzProgress);
@@ -98,6 +104,27 @@ export function LibraryToolbar({
             className="w-full bg-surface border border-border-subtle rounded pl-7 pr-2 py-1 text-xs text-primary placeholder:text-dim focus:outline-none focus:border-accent"
           />
         </div>
+        <button
+          onClick={() => onStarredOnlyChange(!starredOnly)}
+          title={
+            starredOnly
+              ? "Showing starred only — click to show all"
+              : favoritesCount > 0
+                ? `Show only starred (${favoritesCount})`
+                : "Star entries to filter to favorites"
+          }
+          className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded border transition-colors ${
+            starredOnly
+              ? "bg-accent/20 border-accent/50 text-accent"
+              : "border-border-subtle text-muted hover:text-primary hover:bg-surface/60"
+          }`}
+        >
+          <Star
+            size={11}
+            className={starredOnly ? "fill-accent text-accent" : ""}
+          />
+          {starredOnly ? `Starred (${favoritesCount})` : "Starred"}
+        </button>
         <select
           value={protocolFilter ?? ""}
           onChange={(e) => onProtocolFilterChange(e.target.value || null)}

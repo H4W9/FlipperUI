@@ -4,7 +4,11 @@ import { RadioTower, AlertTriangle } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { subghzCancelScan, subghzScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
-import { loadSubghzCache, saveSubghzCache } from "../../lib/subghzCache";
+import {
+  loadSubghzCache,
+  saveSubghzCache,
+  saveSubghzFavorites,
+} from "../../lib/subghzCache";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
 import type { ScanProgress } from "../../types/subghz";
@@ -21,17 +25,38 @@ export function SubGhzLibrary() {
   const setScanning = useFlipperStore((s) => s.setSubghzScanning);
   const setProgress = useFlipperStore((s) => s.setSubghzProgress);
   const setError = useFlipperStore((s) => s.setSubghzError);
+  const favorites = useFlipperStore((s) => s.subghzFavorites);
+  const setFavorites = useFlipperStore((s) => s.setSubghzFavorites);
 
   const [excludedDirs, setExcludedDirs] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
+  const [starredOnly, setStarredOnly] = useState(false);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+
+  const toggleFavorite = (path: string) => {
+    const next = favorites.includes(path)
+      ? favorites.filter((p) => p !== path)
+      : [...favorites, path];
+    setFavorites(next);
+    if (deviceUid) saveSubghzFavorites(deviceUid, next).catch(() => {});
+  };
 
   // Pull excluded dirs from persisted settings so the scan honors them.
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.subghz.excludedDirs));
     return subscribeSettings((s) => setExcludedDirs(s.subghz.excludedDirs));
   }, []);
+
+  const injection = useFlipperStore((s) => s.librarySearchInjection);
+  const clearInjection = useFlipperStore((s) => s.setLibrarySearchInjection);
+  useEffect(() => {
+    if (injection && injection.view === "subghz") {
+      setQuery(injection.query);
+      setProtocolFilter(null);
+      clearInjection(null);
+    }
+  }, [injection, clearInjection]);
 
   // Stream scan progress events from the Rust side.
   useEffect(() => {
@@ -56,11 +81,12 @@ export function SubGhzLibrary() {
       if (cancelled) return;
       setCacheScannedAt(cache?.scannedAt ?? null);
       setEntries(cache?.entries ?? []);
+      setFavorites(cache?.favorites ?? []);
     });
     return () => {
       cancelled = true;
     };
-  }, [deviceUid, setEntries]);
+  }, [deviceUid, setEntries, setFavorites]);
 
   const runScan = async () => {
     if (scanning) return;
@@ -100,9 +126,12 @@ export function SubGhzLibrary() {
     [entries],
   );
 
+  const favSet = useMemo(() => new Set(favorites), [favorites]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter((e) => {
+      if (starredOnly && !favSet.has(e.path)) return false;
       if (protocolFilter && e.protocol !== protocolFilter) return false;
       if (!q) return true;
       const haystack = [e.name, e.protocol, e.preset, e.key, e.modulation]
@@ -111,7 +140,7 @@ export function SubGhzLibrary() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [entries, query, protocolFilter]);
+  }, [entries, query, protocolFilter, starredOnly, favSet]);
 
   // The library view is reachable while disconnected as long as the cache
   // holds entries — scanning degrades inside the toolbar in that case.
@@ -130,6 +159,9 @@ export function SubGhzLibrary() {
         filtered={filtered.length}
         lastScannedAt={cacheScannedAt}
         isConnected={isConnected}
+        starredOnly={starredOnly}
+        onStarredOnlyChange={setStarredOnly}
+        favoritesCount={favorites.length}
       />
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 bg-danger/10 border-b border-danger/30 text-xs text-danger">
@@ -146,7 +178,11 @@ export function SubGhzLibrary() {
       {entries.length === 0 && !scanning ? (
         <EmptyState onScan={runScan} />
       ) : (
-        <LibraryTable entries={filtered} />
+        <LibraryTable
+          entries={filtered}
+          favorites={favSet}
+          onToggleFavorite={toggleFavorite}
+        />
       )}
     </div>
   );

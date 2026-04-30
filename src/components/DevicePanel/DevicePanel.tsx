@@ -8,6 +8,7 @@ import { loadSettings, subscribeSettings, updateSettings } from "../../lib/setti
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { BleDialog } from "./BleDialog";
+import { GlobalSearch } from "../GlobalSearch/GlobalSearch";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -514,6 +515,8 @@ export function DevicePanel() {
       )}
 
       <div className="flex-1" />
+
+      <GlobalSearch />
 
       {showRebootConfirm && (
         <ConfirmDialog

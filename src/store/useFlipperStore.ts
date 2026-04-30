@@ -56,6 +56,8 @@ interface FlipperStore {
   subghzError: string | null;
   /** Path of the .sub file currently being transmitted, or null when idle. */
   subghzTransmittingPath: string | null;
+  /** Starred .sub paths for the current device. Hydrated from cache. */
+  subghzFavorites: string[];
 
   // Infrared library
   irEntries: IrEntry[];
@@ -80,6 +82,12 @@ interface FlipperStore {
   badusbScanning: boolean;
   badusbProgress: BadUsbScanProgress | null;
   badusbError: string | null;
+
+  // Pending search query injected by the GlobalSearch bar. Each library
+  // component reads this on mount / when activeView matches and applies it to
+  // its local query state, then clears it. Single-shot — not a persistent
+  // filter for the library.
+  librarySearchInjection: { view: ActiveView; query: string } | null;
 
   // App library
   appEntries: AppEntry[];
@@ -110,6 +118,8 @@ interface FlipperStore {
   setSubghzProgress: (progress: ScanProgress | null) => void;
   setSubghzError: (error: string | null) => void;
   setSubghzTransmittingPath: (path: string | null) => void;
+  setSubghzFavorites: (favorites: string[]) => void;
+  toggleSubghzFavorite: (path: string) => void;
   setIrEntries: (entries: IrEntry[]) => void;
   setIrScanning: (scanning: boolean) => void;
   setIrProgress: (progress: IrScanProgress | null) => void;
@@ -133,6 +143,9 @@ interface FlipperStore {
   setAppsLaunchingPath: (path: string | null) => void;
   setAppIcons: (icons: Record<string, AppIconEntry>) => void;
   setAppIcon: (path: string, entry: AppIconEntry) => void;
+  setLibrarySearchInjection: (
+    injection: { view: ActiveView; query: string } | null,
+  ) => void;
 }
 
 let cliLineId = 0;
@@ -157,6 +170,7 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   subghzProgress: null,
   subghzError: null,
   subghzTransmittingPath: null,
+  subghzFavorites: [],
   irEntries: [],
   irScanning: false,
   irProgress: null,
@@ -179,6 +193,7 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   appsError: null,
   appsLaunchingPath: null,
   appIcons: {},
+  librarySearchInjection: null,
 
   setActiveView: (activeView) => set({ activeView }),
   setPorts: (ports) => set({ ports }),
@@ -245,6 +260,13 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setSubghzError: (subghzError) => set({ subghzError }),
   setSubghzTransmittingPath: (subghzTransmittingPath) =>
     set({ subghzTransmittingPath }),
+  setSubghzFavorites: (subghzFavorites) => set({ subghzFavorites }),
+  toggleSubghzFavorite: (path) =>
+    set((s) => ({
+      subghzFavorites: s.subghzFavorites.includes(path)
+        ? s.subghzFavorites.filter((p) => p !== path)
+        : [...s.subghzFavorites, path],
+    })),
   setIrEntries: (irEntries) => set({ irEntries }),
   setIrScanning: (irScanning) => set({ irScanning }),
   setIrProgress: (irProgress) => set({ irProgress }),
@@ -269,4 +291,6 @@ export const useFlipperStore = create<FlipperStore>((set) => ({
   setAppIcons: (appIcons) => set({ appIcons }),
   setAppIcon: (path, entry) =>
     set((s) => ({ appIcons: { ...s.appIcons, [path]: entry } })),
+  setLibrarySearchInjection: (librarySearchInjection) =>
+    set({ librarySearchInjection }),
 }));
