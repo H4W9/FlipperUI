@@ -38,6 +38,13 @@ export function DevicePanel() {
   // Track whether the user manually disconnected — suppresses auto-connect
   // until the device is physically unplugged and re-plugged.
   const [userDisconnected, setUserDisconnected] = useState(false);
+  // Per-port cooldown for failed USB auto-connects. Prevents the 2s port-poll
+  // from re-firing connect() against a port that just rejected us, which would
+  // produce a connecting → fail → connecting flicker loop. The user can still
+  // trigger a manual connect from the DevicePanel button (handleConnect bypasses
+  // this map). Cleared when the port disappears so a re-plug retries cleanly.
+  const failedConnectRef = useRef<Map<string, number>>(new Map());
+  const FAILED_CONNECT_COOLDOWN_MS = 15_000;
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
   const [showBleDialog, setShowBleDialog] = useState(false);
   const [transport, setTransport] = useState<"usb" | "ble">("usb");
@@ -124,18 +131,36 @@ export function DevicePanel() {
           setUserDisconnected(false);
         }
 
+        // Drop cooldown entries for ports that have disappeared — once the
+        // port re-enumerates (re-plug or driver re-bind), auto-connect should
+        // try again immediately instead of waiting out the old cooldown.
+        const presentNames = new Set(p.map((x) => x.name));
+        for (const name of Array.from(failedConnectRef.current.keys())) {
+          if (!presentNames.has(name)) failedConnectRef.current.delete(name);
+        }
+
         // Auto-connect: Flipper detected, not connected, not connecting,
-        // user hasn't manually disconnected, and USB transport is selected
+        // user hasn't manually disconnected, USB transport selected, and the
+        // target port isn't in cooldown from a recent failed attempt.
         if (transport === "usb" && flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
           const port = state.selectedPort ?? flipper.name;
-          setSelectedPort(port);
-          setConnecting(true);
-          setError(null);
-          try {
-            const info = await connect(port);
-            setConnected(info, "serial");
-          } catch {
-            setConnecting(false);
+          const lastFailedAt = failedConnectRef.current.get(port) ?? 0;
+          const inCooldown = Date.now() - lastFailedAt < FAILED_CONNECT_COOLDOWN_MS;
+          if (!inCooldown) {
+            setSelectedPort(port);
+            setConnecting(true);
+            setError(null);
+            try {
+              const info = await connect(port);
+              setConnected(info, "serial");
+              failedConnectRef.current.delete(port);
+            } catch (err) {
+              setConnecting(false);
+              failedConnectRef.current.set(port, Date.now());
+              setError(
+                `Auto-connect to ${port} failed${err instanceof Error && err.message ? `: ${err.message}` : ""} — will retry in ${Math.round(FAILED_CONNECT_COOLDOWN_MS / 1000)}s`,
+              );
+            }
           }
         }
 
@@ -324,6 +349,10 @@ export function DevicePanel() {
 
   const handleConnect = async () => {
     if (!selectedPort) return;
+    // Manual connect always overrides any auto-connect cooldown — the user is
+    // explicitly asking to retry, so reset both the failed-port map and the
+    // userDisconnected flag.
+    failedConnectRef.current.delete(selectedPort);
     setUserDisconnected(false);
     setConnecting(true);
     setError(null);
@@ -333,6 +362,7 @@ export function DevicePanel() {
     } catch (e: unknown) {
       setError(String(e));
       setConnecting(false);
+      failedConnectRef.current.set(selectedPort, Date.now());
     }
   };
 

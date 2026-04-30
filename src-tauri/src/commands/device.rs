@@ -33,9 +33,19 @@ pub struct DeviceInfo {
     pub firmware_build_date: Option<String>,
 }
 
-/// List serial ports that belong to a Flipper Zero.
-/// On macOS, filters ports to the Flipper's `usbmodemflip*` device names to
-/// avoid surfacing unrelated serial ports in the picker.
+/// Flipper Zero's USB VID/PID — the device exposes itself as a STM32 virtual
+/// COM port. Used as the cross-platform identifier so we don't auto-connect to
+/// random Bluetooth virtual ports, modems, or vendor serial dongles.
+const FLIPPER_USB_VID: u16 = 0x0483;
+const FLIPPER_USB_PID: u16 = 0x5740;
+
+/// List serial ports, marking Flipper Zero ports via USB VID/PID. On macOS we
+/// additionally drop non-Flipper ports entirely (the `usbmodemflip*` naming
+/// gives us a stable filter), since the picker on macOS is Flipper-only and
+/// surfacing the system's other tty devices is just noise. On Windows / Linux
+/// we keep every port in the list but only mark the Flipper as connectable —
+/// auto-connect logic on the frontend keys off `is_flipper`, so a stray COM
+/// port can't trigger a connection retry loop.
 #[tauri::command]
 pub fn list_ports() -> Result<Vec<PortInfo>> {
     // Note: list_ports is kept synchronous because serialport::available_ports()
@@ -45,18 +55,32 @@ pub fn list_ports() -> Result<Vec<PortInfo>> {
     Ok(ports
         .into_iter()
         .filter_map(|p| {
-            if cfg!(target_os = "macos") && !p.port_name.to_lowercase().contains("usbmodemflip") {
-                return None;
-            }
             let (vid, pid, manufacturer) = match &p.port_type {
                 serialport::SerialPortType::UsbPort(usb) => {
                     (Some(usb.vid), Some(usb.pid), usb.manufacturer.clone())
                 }
                 _ => (None, None, None),
             };
+            let is_flipper = matches!((vid, pid), (Some(FLIPPER_USB_VID), Some(FLIPPER_USB_PID)));
+
+            // Belt-and-braces fallback: some macOS USB stacks return the port
+            // without a populated VID/PID on first enumeration, so accept the
+            // historical name-based match as a fallback there.
+            let is_flipper = is_flipper
+                || (cfg!(target_os = "macos")
+                    && p.port_name.to_lowercase().contains("usbmodemflip"));
+
+            // On macOS, hide non-Flipper ports outright to keep the picker
+            // clean. On Windows / Linux we keep them visible but un-flipped
+            // — the user can still see what's plugged in, but auto-connect
+            // won't target them.
+            if cfg!(target_os = "macos") && !is_flipper {
+                return None;
+            }
+
             Some(PortInfo {
                 name: p.port_name,
-                is_flipper: true,
+                is_flipper,
                 vid,
                 pid,
                 manufacturer,
