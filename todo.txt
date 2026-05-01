@@ -5,14 +5,6 @@ ____________________________________________________________
 
 a list of everything i'd like to implement sooner or l8er :)
 
-______________________________
-
-INFO
-______________________________
-
-Colors:
-    Flipper Orange
-        #ff8300
 
 
 ______________________________
@@ -47,9 +39,6 @@ ______________________________
 --- SUBGHZ ---
 [ ] finish subghz one-click replay TX - currently disabled. Needs the correct RPC sequence (AppStart + LoadFile + ButtonPress or a variant). Stock firmware's Sub-GHz app main-menu scene doesn't register an RPC callback, and launching with a file path arg preloads the Transmitter scene but ButtonPress didn't trigger TX. Things to try next: launching with empty args + LoadFile + ButtonPress("send"); or the "Sub-GHz RPC" app variant if firmware exposes it.
 
-
--- EASY --
-[ ] redo README.md with all new features and screenshots
 
 
 ______________________________
@@ -138,3 +127,4 @@ ______________________________
 [x] "recently added" / mtime sort column for every library - the mtime is already captured per entry, just isn't exposed as a sortable column or default sort yet
 [x] global search bar - GlobalSearch component mounted top-right of DevicePanel header (⌘F focuses); searches across subghz / ir / nfc / rfid / badusb / apps entry indexes plus the file browser's current directory, with grouped results capped at 6 per group / 30 total. Selecting a result calls setActiveView + setLibrarySearchInjection, and the destination library reads librarySearchInjection from the Zustand store, prefilling its local query and clearing the injection. Files are limited to the current path (no recursive index today)
 [x] enable dark-mode for menu-bar in windows — gated app.set_menu() to macOS only in src-tauri/src/lib.rs; Windows/Linux no longer get the grey native menu strip below the title bar (Cut/Copy/Paste keep working via native shortcuts; Settings is reachable via tray + sidebar)
+[x] redo README.md with all new features and screenshots

@@ -23,6 +23,10 @@ FlipperUI is built for people who use their Flipper Zero often and want a deskto
 
 > FlipperUI is pre-release software. The app is actively evolving and is currently tested most heavily on macOS.
 
+<p align="center">
+  <img src="public/FlipperUI_v0.3.5_Dashboard.png" alt="FlipperUI v0.3.5 dashboard" width="900">
+</p>
+
 ## Highlights
 
 - **Native Flipper Zero connection manager** with USB serial and BLE support, port detection, remembered devices, reconnect handling, battery, storage, and latency indicators.
