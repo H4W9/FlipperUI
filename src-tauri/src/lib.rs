@@ -31,16 +31,34 @@ pub mod pb {
 }
 
 use state::AppState;
-use tauri::menu::{
-    AboutMetadataBuilder, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
-};
+use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder};
+#[cfg(target_os = "macos")]
+use tauri::menu::{AboutMetadataBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+/// Render a 10-segment percentage bar using filled/empty Unicode block glyphs.
+/// Used in the tray flyout battery row so users get a quick visual read on
+/// charge level without parsing the digits.
+fn battery_bar(charge: u8) -> String {
+    const WIDTH: u8 = 10;
+    let pct = charge.min(100) as u16;
+    let filled = (pct * WIDTH as u16 / 100) as u8;
+    let mut bar = String::with_capacity(WIDTH as usize * 3);
+    for _ in 0..filled {
+        bar.push('▰');
+    }
+    for _ in 0..WIDTH.saturating_sub(filled) {
+        bar.push('▱');
+    }
+    bar
+}
+
 /// Build the tray flyout menu: device status header (when connected),
-/// navigation shortcuts to each major view, then Show/Hide/Quit. The menu is
-/// rebuilt on every status push so the battery/device fields stay live.
+/// navigation shortcuts to each major view, then a window-visible toggle and
+/// Quit. The menu is rebuilt on every status push so the battery bar and
+/// device fields stay live.
 pub fn build_tray_menu(
     app: &tauri::AppHandle,
     status: &commands::tray::TrayStatus,
@@ -61,22 +79,34 @@ pub fn build_tray_menu(
         builder = builder.item(&header);
 
         if let Some(charge) = status.battery_charge {
-            let bolt = if status.battery_charging { " ⚡" } else { "" };
+            let bolt = if status.battery_charging { "  ⚡" } else { "" };
+            let bar = battery_bar(charge);
             let battery = MenuItemBuilder::with_id(
                 "tray-status-battery",
-                format!("Battery: {charge}%{bolt}"),
+                format!("Battery  {bar}  {charge}%{bolt}"),
             )
             .enabled(false)
             .build(app)?;
             builder = builder.item(&battery);
         }
     } else {
-        let header = MenuItemBuilder::with_id("tray-status-device", "Disconnected")
+        let header = MenuItemBuilder::with_id("tray-status-device", "○ Disconnected")
             .enabled(false)
             .build(app)?;
         builder = builder.item(&header);
     }
     builder = builder.separator();
+
+    // Window visibility toggle — replaces the previous Show/Hide pair with a
+    // single checkable item so the current state is visible at a glance.
+    let window_visible = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    let visible_toggle = CheckMenuItemBuilder::with_id("tray-window-toggle", "Window Visible")
+        .checked(window_visible)
+        .build(app)?;
+    builder = builder.item(&visible_toggle).separator();
 
     // Navigation shortcuts. The frontend listens for "tray-nav" events and
     // calls setActiveView with the payload. Items that require a connection
@@ -118,15 +148,19 @@ pub fn build_tray_menu(
         .item(&nav_settings)
         .separator();
 
-    let show = MenuItemBuilder::with_id("tray-show", "Show FlipperUI").build(app)?;
-    let hide = MenuItemBuilder::with_id("tray-hide", "Hide FlipperUI").build(app)?;
     let quit = MenuItemBuilder::with_id("tray-quit", "Quit FlipperUI").build(app)?;
-    builder
-        .item(&show)
-        .item(&hide)
-        .separator()
-        .item(&quit)
-        .build()
+    builder.item(&quit).build()
+}
+
+/// Rebuild the tray menu with the latest cached status. Called whenever
+/// something that affects the menu changes outside of `update_tray_status`,
+/// e.g. the window visibility toggle.
+pub fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let menu = build_tray_menu(app, &commands::tray::tray_status())?;
+        tray.set_menu(Some(menu))?;
+    }
+    Ok(())
 }
 
 pub const TRAY_ID: &str = "main-tray";
@@ -245,54 +279,65 @@ pub fn run() {
             // We also reconstruct the standard Edit + Window submenus so
             // Cut/Copy/Paste and Minimize/Close keep working — replacing the
             // default menu drops those unless we add them back.
-            let about_meta = AboutMetadataBuilder::new()
-                .name(Some("FlipperUI"))
-                .version(Some(env!("CARGO_PKG_VERSION")))
-                .copyright(Some("in love -maz"))
-                .build();
+            //
+            // macOS only: on Windows/Linux a top-level app menu renders as a
+            // grey strip below the title bar (the platform "menu bar"), which
+            // clashes with our own header. The submenu items here are all
+            // either macOS-specific (services/hide/show-all) or already
+            // covered by native shortcuts (Cut/Copy/Paste, Minimize/Close)
+            // and in-app UI (Settings via tray + sidebar), so we just skip
+            // installing the menu on non-mac platforms.
+            #[cfg(target_os = "macos")]
+            {
+                let about_meta = AboutMetadataBuilder::new()
+                    .name(Some("FlipperUI"))
+                    .version(Some(env!("CARGO_PKG_VERSION")))
+                    .copyright(Some("in love -maz"))
+                    .build();
 
-            let settings = MenuItemBuilder::with_id("settings", "Settings…")
-                .accelerator("CmdOrCtrl+,")
-                .build(app)?;
+                let settings = MenuItemBuilder::with_id("settings", "Settings…")
+                    .accelerator("CmdOrCtrl+,")
+                    .build(app)?;
 
-            let app_submenu = SubmenuBuilder::new(app, "FlipperUI")
-                .item(&PredefinedMenuItem::about(
-                    app,
-                    Some("About FlipperUI"),
-                    Some(about_meta),
-                )?)
-                .separator()
-                .item(&settings)
-                .separator()
-                .services()
-                .separator()
-                .hide()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
+                let app_submenu = SubmenuBuilder::new(app, "FlipperUI")
+                    .item(&PredefinedMenuItem::about(
+                        app,
+                        Some("About FlipperUI"),
+                        Some(about_meta),
+                    )?)
+                    .separator()
+                    .item(&settings)
+                    .separator()
+                    .services()
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .quit()
+                    .build()?;
 
-            let edit_submenu = SubmenuBuilder::new(app, "Edit")
-                .undo()
-                .redo()
-                .separator()
-                .cut()
-                .copy()
-                .paste()
-                .select_all()
-                .build()?;
+                let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
 
-            let window_submenu = SubmenuBuilder::new(app, "Window")
-                .minimize()
-                .separator()
-                .close_window()
-                .build()?;
+                let window_submenu = SubmenuBuilder::new(app, "Window")
+                    .minimize()
+                    .separator()
+                    .close_window()
+                    .build()?;
 
-            let menu = MenuBuilder::new(app)
-                .items(&[&app_submenu, &edit_submenu, &window_submenu])
-                .build()?;
-            app.set_menu(menu)?;
+                let menu = MenuBuilder::new(app)
+                    .items(&[&app_submenu, &edit_submenu, &window_submenu])
+                    .build()?;
+                app.set_menu(menu)?;
+            }
 
             app.on_menu_event(|app, event| {
                 let id = event.id().as_ref();
@@ -306,6 +351,7 @@ pub fn run() {
                         let _ = w.unminimize();
                     }
                     let _ = app.emit("tray-nav", view.to_string());
+                    let _ = refresh_tray_menu(app);
                     return;
                 }
                 match id {
@@ -313,17 +359,17 @@ pub fn run() {
                         let _ = app.emit("open-settings", ());
                     }
                     // Tray menu items — toggle window visibility / quit.
-                    "tray-show" => {
+                    "tray-window-toggle" => {
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                            let _ = w.unminimize();
+                            if w.is_visible().unwrap_or(false) {
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                                let _ = w.unminimize();
+                            }
                         }
-                    }
-                    "tray-hide" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.hide();
-                        }
+                        let _ = refresh_tray_menu(app);
                     }
                     "tray-quit" => {
                         app.exit(0);
