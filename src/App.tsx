@@ -19,6 +19,7 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
 import { loadSettings } from "./lib/settings";
+import { notify } from "./lib/notify";
 import { usePreloadLibraries } from "./hooks/usePreloadLibraries";
 import flipperOutlineUrl from "./assets/flipper-outline.svg";
 import { ErrorBanner } from "./components/ui/ErrorBanner";
@@ -128,6 +129,7 @@ export default function App() {
     listen<string>("flipper-disconnected", (event) => {
       setConnected(null);
       setError(`Disconnected: ${event.payload} — reconnecting…`);
+      void notify("Flipper disconnected", event.payload);
       cancel();
       reconnectAttemptsRef.current = 0;
       // Initial 500ms grace so the OS has time to release the serial port /

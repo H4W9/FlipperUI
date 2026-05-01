@@ -37,7 +37,6 @@ ______________________________
 --- ASSETS ---
 
 --- NEW FEATURES ---
-[ ] OS-level notifications for finished library scans / completed transfers / device disconnects, using tauri-plugin-notification. Should respect a Settings toggle so users who don't want them can turn them off.
 [ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter in the toolbar
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
 [ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this; libraries don't yet)
@@ -71,6 +70,7 @@ ______________________________
 TODO - DONE
 ______________________________
 
+[x] OS-level notifications - tauri-plugin-notification wired in for finished library scans (all 6), completed file transfers (download/upload), and device disconnects. Gated by a Settings → Notifications toggle (default on); permission is requested lazily on first send and cached for the session
 [x] left navigation rail - File Explorer / Sub-GHz / Settings (settings pinned bottom)
 [x] settings pane (replaces modal) - About / General (language stub) / Sub-GHz (excluded dirs) / Developer
 [x] persisted settings via tauri-plugin-store - { language, subghz: { excludedDirs[] } }

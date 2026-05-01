@@ -12,6 +12,7 @@ import {
   Languages,
   Info,
   MonitorCog,
+  Bell,
   X,
   Plus,
 } from "lucide-react";
@@ -109,6 +110,11 @@ export function SettingsPane() {
     );
   };
 
+  const onNotificationsEnabledChange = async (enabled: boolean) => {
+    const next = await updateSettings({ notifications: { enabled } });
+    setSettings(next);
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-4">
@@ -197,6 +203,20 @@ export function SettingsPane() {
               />
             </Row>
           )}
+        </Section>
+
+        <Section icon={<Bell size={13} />} title="Notifications">
+          <Row
+            label="OS notifications"
+            hint="Show desktop notifications when library scans or transfers finish, and when the device disconnects. The first notification will prompt for OS-level permission."
+          >
+            <Toggle
+              checked={settings?.notifications.enabled ?? true}
+              disabled={!settings}
+              onChange={onNotificationsEnabledChange}
+              ariaLabel="OS notifications"
+            />
+          </Row>
         </Section>
 
         <Section icon={<RadioTower size={13} />} title="Sub-GHz">

@@ -4,6 +4,7 @@ import { RadioTower, AlertTriangle } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { subghzCancelScan, subghzScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { notify } from "../../lib/notify";
 import {
   loadSubghzCache,
   saveSubghzCache,
@@ -102,6 +103,7 @@ export function SubGhzLibrary() {
         await saveSubghzCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("Sub-GHz scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

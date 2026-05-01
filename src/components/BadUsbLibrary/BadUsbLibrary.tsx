@@ -5,6 +5,7 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { badusbCancelScan, badusbScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadBadUsbCache, saveBadUsbCache } from "../../lib/badusbCache";
+import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
 import { FilePreviewModal } from "./FilePreviewModal";
@@ -83,6 +84,7 @@ export function BadUsbLibrary() {
         await saveBadUsbCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("BadUSB scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

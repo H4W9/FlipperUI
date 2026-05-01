@@ -272,6 +272,7 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::new())
         .setup(|app| {
             // Custom app-menu with a "Settings…" item (Cmd+,). Clicking it

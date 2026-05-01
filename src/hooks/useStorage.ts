@@ -11,6 +11,7 @@ import {
 } from "../lib/tauri";
 import { joinPath } from "../lib/encoding";
 import { basename } from "../lib/path";
+import { notify } from "../lib/notify";
 import { useFlipperStore } from "../store/useFlipperStore";
 
 export function useStorage() {
@@ -53,6 +54,7 @@ export function useStorage() {
 
       await storageReadToLocal(remotePath, savePath);
       setTransferProgress(100);
+      void notify("Download complete", name);
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);
@@ -91,6 +93,7 @@ export function useStorage() {
       // Only refresh the visible listing when the upload landed there;
       // otherwise the user is still looking at currentPath and we'd flicker.
       if (dir === currentPath) await refresh(currentPath);
+      void notify("Upload complete", basename(localPath) || "file");
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);

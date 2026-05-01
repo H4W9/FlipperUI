@@ -46,6 +46,11 @@ export interface AppSettings {
      * the menubar's foreground color (template image on macOS). */
     monochromeIcon: boolean;
   };
+  notifications: {
+    /** Master switch for OS notifications (library scans, transfers,
+     * disconnects). When false, no notifications are shown. */
+    enabled: boolean;
+  };
   connection: {
     /** Last-used transport. Restored on app launch. */
     transport: "usb" | "ble";
@@ -67,6 +72,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
+  notifications: { enabled: true },
   connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null },
 };
 
@@ -95,6 +101,9 @@ export type SettingsPatch = {
     enabled?: boolean;
     hideDockIcon?: boolean;
     monochromeIcon?: boolean;
+  };
+  notifications?: {
+    enabled?: boolean;
   };
   connection?: {
     transport?: "usb" | "ble";
@@ -150,6 +159,10 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
       hideDockIcon: patch.tray?.hideDockIcon ?? current.tray.hideDockIcon,
       monochromeIcon:
         patch.tray?.monochromeIcon ?? current.tray.monochromeIcon,
+    },
+    notifications: {
+      enabled:
+        patch.notifications?.enabled ?? current.notifications.enabled,
     },
     connection: {
       transport: patch.connection?.transport ?? current.connection.transport,
@@ -214,6 +227,10 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
         raw.tray?.hideDockIcon ?? DEFAULT_SETTINGS.tray.hideDockIcon,
       monochromeIcon:
         raw.tray?.monochromeIcon ?? DEFAULT_SETTINGS.tray.monochromeIcon,
+    },
+    notifications: {
+      enabled:
+        raw.notifications?.enabled ?? DEFAULT_SETTINGS.notifications.enabled,
     },
     connection: {
       transport:

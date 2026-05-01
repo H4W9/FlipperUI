@@ -5,6 +5,7 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { nfcCancelScan, nfcParsePaths, nfcScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadNfcCache, saveNfcCache } from "../../lib/nfcCache";
+import { notify } from "../../lib/notify";
 import { useLibraryDrop } from "../../hooks/useLibraryDrop";
 import { LibraryDropOverlay } from "../ui/LibraryDropOverlay";
 import { LibraryToolbar } from "./LibraryToolbar";
@@ -86,6 +87,7 @@ export function NfcLibrary() {
         await saveNfcCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("NFC scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

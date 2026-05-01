@@ -1,6 +1,6 @@
 [package]
 name = "flipperui"
-version = "0.3.4"
+version = "0.3.5"
 description = "FlipperUI - A Tauri-based Flipper Zero file-manager and Signal-Library"
 authors = ["maz"]
 edition = "2021"
@@ -27,6 +27,7 @@ base64 = "0.22"
 tauri-plugin-drag = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 object = { version = "0.36", default-features = false, features = ["read_core", "elf", "std"] }

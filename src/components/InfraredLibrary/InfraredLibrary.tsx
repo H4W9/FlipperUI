@@ -5,6 +5,7 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { infraredCancelScan, infraredScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadInfraredCache, saveInfraredCache } from "../../lib/infraredCache";
+import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
 import type { IrScanProgress } from "../../types/infrared";
@@ -80,6 +81,7 @@ export function InfraredLibrary() {
         await saveInfraredCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("Infrared scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

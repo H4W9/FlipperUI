@@ -6,6 +6,7 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { rfidCancelScan, rfidParsePaths, rfidScan } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadRfidCache, saveRfidCache } from "../../lib/rfidCache";
+import { notify } from "../../lib/notify";
 import { useLibraryDrop } from "../../hooks/useLibraryDrop";
 import { LibraryDropOverlay } from "../ui/LibraryDropOverlay";
 import { LibraryToolbar } from "./LibraryToolbar";
@@ -82,6 +83,7 @@ export function RfidLibrary() {
         await saveRfidCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("RFID scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

@@ -13,6 +13,7 @@ import {
 } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { loadAppsCache, saveAppIcons, saveAppsCache } from "../../lib/appsCache";
+import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
 import { basename } from "../../lib/path";
@@ -147,6 +148,7 @@ export function AppLibrary() {
         await saveAppsCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
+      void notify("App scan complete", `${list.length} apps indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {
