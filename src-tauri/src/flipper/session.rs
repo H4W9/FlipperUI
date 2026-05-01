@@ -77,10 +77,7 @@ pub fn open_session(port_name: &str) -> Result<FlipperClient> {
         match transport.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
             Ok(_) => {} // consume echoed characters, \r, etc.
-            Err(e)
-                if e.kind() == std::io::ErrorKind::TimedOut
-                    || e.raw_os_error() == Some(121) =>
-            {
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut || e.raw_os_error() == Some(121) => {
                 tracing::warn!(
                     port = %port_name,
                     raw_os = ?e.raw_os_error(),

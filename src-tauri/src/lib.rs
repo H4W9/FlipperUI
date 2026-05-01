@@ -31,9 +31,9 @@ pub mod pb {
 }
 
 use state::AppState;
-use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder};
 #[cfg(target_os = "macos")]
 use tauri::menu::{AboutMetadataBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
