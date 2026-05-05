@@ -461,31 +461,44 @@ export function DevicePanel() {
           <button
             onClick={handleConnect}
             disabled={!selectedPort || isConnecting}
-            className="flex items-center gap-1.5 px-3 py-1 text-sm bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
+            aria-label={isConnecting ? "Connecting" : "Connect"}
+            title={isConnecting ? "Connecting…" : "Connect"}
+            className="flex items-center justify-center px-2 py-1 bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
-            {isConnecting ? <Spinner size={13} /> : null}
-            {isConnecting ? "Connecting…" : "Connect"}
+            {isConnecting ? <Spinner size={14} /> : <LinkIcon size={14} />}
           </button>
         ) : (
           <button
             onClick={() => setShowBleDialog(true)}
             disabled={isConnecting}
-            className="flex items-center gap-1.5 px-3 py-1 text-sm bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
+            aria-label={
+              reconnectAttempt != null
+                ? `Reconnecting (${reconnectAttempt}/5)`
+                : isConnecting
+                ? "Connecting"
+                : "Connect"
+            }
+            title={
+              reconnectAttempt != null
+                ? `Reconnecting… (${reconnectAttempt}/5)`
+                : isConnecting
+                ? "Connecting…"
+                : "Connect"
+            }
+            className="flex items-center justify-center gap-1.5 px-2 py-1 text-xs bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
-            {isConnecting ? <Spinner size={13} /> : null}
-            {reconnectAttempt != null
-              ? `Reconnecting… (${reconnectAttempt}/5)`
-              : isConnecting
-              ? "Connecting…"
-              : "Connect"}
+            {isConnecting ? <Spinner size={14} /> : <LinkIcon size={14} />}
+            {reconnectAttempt != null ? <span>{reconnectAttempt}/5</span> : null}
           </button>
         )
       ) : (
         <button
           onClick={handleDisconnect}
-          className="px-3 py-1 text-sm bg-elevated hover:bg-muted text-primary rounded transition-colors"
+          aria-label="Disconnect"
+          title="Disconnect"
+          className="flex items-center justify-center px-2 py-1 bg-elevated hover:bg-muted text-primary rounded transition-colors"
         >
-          Disconnect
+          <Unlink size={14} />
         </button>
       )}
 
