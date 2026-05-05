@@ -52,5 +52,6 @@ Thumbs.db
 # Claude Code / AI agent config (local, not project source)
 .claude/
 .remember/
+.agents/
 CLAUDE.md
 AGENTS.md
