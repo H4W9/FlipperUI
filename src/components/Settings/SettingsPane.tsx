@@ -13,6 +13,7 @@ import {
   Info,
   MonitorCog,
   Bell,
+  Plug,
   X,
   Plus,
 } from "lucide-react";
@@ -115,6 +116,11 @@ export function SettingsPane() {
     setSettings(next);
   };
 
+  const onAutoReconnectChange = async (autoReconnect: boolean) => {
+    const next = await updateSettings({ connection: { autoReconnect } });
+    setSettings(next);
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-4">
@@ -203,6 +209,20 @@ export function SettingsPane() {
               />
             </Row>
           )}
+        </Section>
+
+        <Section icon={<Plug size={13} />} title="Connection">
+          <Row
+            label="Auto-connect & auto-reconnect"
+            hint="When on, FlipperUI automatically connects to a Flipper as soon as it shows up (USB port detected, or last-paired BLE peripheral) and reconnects after an unexpected drop. Off by default — click Connect manually."
+          >
+            <Toggle
+              checked={settings?.connection.autoReconnect ?? false}
+              disabled={!settings}
+              onChange={onAutoReconnectChange}
+              ariaLabel="Auto-connect and auto-reconnect"
+            />
+          </Row>
         </Section>
 
         <Section icon={<Bell size={13} />} title="Notifications">

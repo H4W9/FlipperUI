@@ -60,6 +60,11 @@ export interface AppSettings {
     lastBleId: string | null;
     /** Display name for the last-connected BLE peripheral. */
     lastBleName: string | null;
+    /** When true, the app auto-connects to a Flipper as soon as it shows up
+     * (USB port detected, or a previously paired BLE peripheral) and
+     * auto-reconnects after an unexpected drop. When false, the user must
+     * click Connect manually. */
+    autoReconnect: boolean;
   };
 }
 
@@ -73,7 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
   notifications: { enabled: true },
-  connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null },
+  connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null, autoReconnect: false },
 };
 
 export type SettingsPatch = {
@@ -110,6 +115,7 @@ export type SettingsPatch = {
     lastPort?: string | null;
     lastBleId?: string | null;
     lastBleName?: string | null;
+    autoReconnect?: boolean;
   };
 };
 
@@ -178,6 +184,8 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
         patch.connection?.lastBleName !== undefined
           ? patch.connection.lastBleName
           : current.connection.lastBleName,
+      autoReconnect:
+        patch.connection?.autoReconnect ?? current.connection.autoReconnect,
     },
   };
   await store.set(STORE_KEY, next);
@@ -241,6 +249,9 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
         raw.connection?.lastBleId ?? DEFAULT_SETTINGS.connection.lastBleId,
       lastBleName:
         raw.connection?.lastBleName ?? DEFAULT_SETTINGS.connection.lastBleName,
+      autoReconnect:
+        raw.connection?.autoReconnect ??
+        DEFAULT_SETTINGS.connection.autoReconnect,
     },
   };
 }

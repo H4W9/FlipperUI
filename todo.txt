@@ -25,6 +25,8 @@ ______________________________
 --- FIXES / IMPROVEMENTS ---
 [ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens. Goal: device header should never wrap or clip on a 800px-wide window; the most-relevant chip (battery / signal) stays visible, the rest collapse into a "•••" popover.
 [ ] fix drag-out from library rows to Finder - useExportDrag (NFC/IR/BadUSB) silently no-ops on macOS. Drop-IN works, drop-OUT doesn't. Root cause: @crabnebula/tauri-plugin-drag's startDrag must be invoked synchronously inside the dragstart event, but we read the file off the Flipper asynchronously first — by the time startDrag is called the dragstart has already concluded and the OS never opens an NSDraggingSession. Attempted prefetch-on-hover fix did not resolve. Next directions to try: (1) pre-populate the temp file at row mount instead of on hover so it's always ready by dragstart, (2) set effectAllowed before startDrag, (3) replace @crabnebula/tauri-plugin-drag with a different mechanism (native Tauri drag or alternate plugin).
+[ ] GIF screen-recorder - add recording-incicator (blinking red dot) and time elapsed and make gif-record-button more prominent.
+[ ] Screen-Stream - improve UI in general
 
 --- ASSETS ---
 

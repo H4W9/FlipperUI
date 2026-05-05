@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { Monitor, Maximize2, Minimize2, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2 } from "lucide-react";
+import { Monitor, ZoomIn, ZoomOut, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2 } from "lucide-react";
 import { GIFEncoder, applyPalette } from "gifenc";
 import { screenStreamStart, screenStreamStop, sendInputEvent } from "../../lib/tauri";
 import { base64ToUint8Array } from "../../lib/encoding";
@@ -47,16 +47,26 @@ function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Discrete zoom levels. The default sits between the prior 3× and 4× — about
+// 10% larger than the original — so the screen has more presence without
+// pushing past comfortable on smaller windows.
+const SCALES = [2, 2.6, 3.3, 4, 5] as const;
+const DEFAULT_SCALE_INDEX = 2;
+
+function formatScale(scale: number): string {
+  return Number.isInteger(scale) ? `${scale}x` : `${scale.toFixed(1)}x`;
+}
+
 function DpadBtn({ icon, onPress, ariaLabel, label }: { icon: React.ReactNode; onPress: () => void; ariaLabel: string; label?: string }) {
   return (
     <button
       onMouseDown={(e) => { e.preventDefault(); onPress(); }}
       aria-label={ariaLabel}
-      className="flex flex-col items-center justify-center gap-0.5 w-7 h-7 rounded bg-surface hover:bg-elevated active:bg-flipper/30 text-secondary hover:text-primary transition-colors"
+      className="flex flex-col items-center justify-center gap-0.5 w-9 h-9 rounded-md border border-border-subtle bg-surface hover:bg-elevated hover:border-flipper/40 active:bg-flipper/30 active:border-flipper text-secondary hover:text-primary transition-colors"
       title={ariaLabel}
     >
       {icon}
-      {label && <span className="text-[8px] text-dim leading-none">{label}</span>}
+      {label && <span className="text-[9px] text-dim leading-none">{label}</span>}
     </button>
   );
 }
@@ -64,7 +74,8 @@ function DpadBtn({ icon, onPress, ariaLabel, label }: { icon: React.ReactNode; o
 export function ScreenViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [connected, setConnected] = useState(false);
-  const [scale, setScale] = useState(3); // 3x = 384x192
+  const [scaleIndex, setScaleIndex] = useState(DEFAULT_SCALE_INDEX);
+  const scale = SCALES[scaleIndex];
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordElapsed, setRecordElapsed] = useState(0);
@@ -74,8 +85,11 @@ export function ScreenViewer() {
   // into a GIF when the user stops recording.
   const recordingRef = useRef<{ frames: { rgba: Uint8Array; ts: number }[]; startedAt: number } | null>(null);
 
-  const toggleScale = useCallback(() => {
-    setScale((s) => (s === 3 ? 5 : s === 5 ? 2 : 3));
+  const zoomIn = useCallback(() => {
+    setScaleIndex((i) => Math.min(SCALES.length - 1, i + 1));
+  }, []);
+  const zoomOut = useCallback(() => {
+    setScaleIndex((i) => Math.max(0, i - 1));
   }, []);
 
   const saveScreenshot = useCallback(async () => {
@@ -302,59 +316,105 @@ export function ScreenViewer() {
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-app overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-subtle bg-panel/50 shrink-0">
-        <div className="flex items-center gap-2">
-          <Monitor size={13} className="text-accent" />
-          <span className="text-xs text-secondary font-medium">
-            Screen
-            {!connected && !error && (
-              <span className="ml-2 text-dim">connecting...</span>
-            )}
-            {isRecording && (
-              <span className="ml-2 text-danger font-mono">
-                ● {formatElapsed(recordElapsed)}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-panel/50 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Monitor size={14} className="text-accent shrink-0" />
+          <span className="text-xs text-primary font-medium">Screen</span>
+          {!connected && !error && (
+            <span className="text-[11px] text-dim">connecting…</span>
+          )}
+          {isRecording && (
+            <span
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-danger/15 border border-danger/30 text-danger text-[11px] font-mono tabular-nums"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
               </span>
-            )}
-          </span>
+              <span>REC {formatElapsed(recordElapsed)}</span>
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={toggleScale}
-            aria-label="Toggle zoom"
-            className="p-0.5 text-muted hover:text-primary rounded transition-colors"
-            title={`${scale}x zoom`}
-          >
-            {scale > 3 ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-          </button>
-          <span className="text-[10px] text-dim w-5 text-center">{scale}x</span>
+        <div className="flex items-center gap-1.5">
+          {/* Zoom group */}
+          <div className="flex items-center gap-0.5 px-1 py-0.5 rounded border border-border-subtle bg-surface/40">
+            <button
+              onClick={zoomOut}
+              disabled={scaleIndex === 0}
+              aria-label="Zoom out"
+              className="p-0.5 text-muted hover:text-primary rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Zoom out"
+            >
+              <ZoomOut size={13} />
+            </button>
+            <span className="text-[10px] text-dim w-9 text-center tabular-nums">
+              {formatScale(scale)}
+            </span>
+            <button
+              onClick={zoomIn}
+              disabled={scaleIndex === SCALES.length - 1}
+              aria-label="Zoom in"
+              className="p-0.5 text-muted hover:text-primary rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Zoom in"
+            >
+              <ZoomIn size={13} />
+            </button>
+          </div>
+
           <button
             onClick={saveScreenshot}
+            disabled={!connected}
             aria-label="Save screenshot"
-            className="p-0.5 text-muted hover:text-primary rounded transition-colors"
-            title="Save screenshot"
+            className="p-1 text-muted hover:text-primary rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Save screenshot (PNG)"
           >
-            <Camera size={12} />
+            <Camera size={14} />
           </button>
+
+          {/* Vertical divider so the record action reads as its own thing */}
+          <div className="w-px h-5 bg-border-subtle mx-0.5" />
+
+          {/* Prominent GIF record button — larger pill with text + colour cue */}
           <button
             onClick={isRecording ? stopRecording : startRecording}
-            aria-label={isRecording ? "Stop recording" : "Record GIF"}
-            className={`p-0.5 rounded transition-colors ${
-              isRecording ? "text-danger hover:text-primary" : "text-muted hover:text-primary"
-            }`}
-            title={isRecording ? "Stop recording" : "Record GIF"}
             disabled={!connected}
+            aria-label={isRecording ? "Stop recording" : "Record GIF"}
+            title={isRecording ? "Stop recording" : "Record GIF"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              isRecording
+                ? "bg-danger/20 border-danger/50 text-danger hover:bg-danger/30"
+                : "bg-surface/60 border-border-subtle text-secondary hover:bg-danger/10 hover:border-danger/40 hover:text-danger"
+            }`}
           >
-            {isRecording ? <Square size={12} fill="currentColor" /> : <Circle size={12} />}
+            {isRecording ? (
+              <>
+                <Square size={11} fill="currentColor" />
+                <span>Stop</span>
+              </>
+            ) : (
+              <>
+                <Circle size={11} fill="currentColor" className="text-danger" />
+                <span>Record GIF</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 min-h-0 p-4 bg-app flex items-center justify-center overflow-auto">
+      <div className="flex-1 min-h-0 p-6 bg-app flex items-center justify-center overflow-auto">
         {error ? (
           <div className="text-xs text-danger px-4 py-8">{error}</div>
         ) : (
-          <div className="relative">
+          <div
+            className={`relative rounded-md transition-shadow ${
+              isRecording
+                ? "shadow-[0_0_0_2px_rgba(239,68,68,0.55),0_0_28px_4px_rgba(239,68,68,0.25)]"
+                : ""
+            }`}
+          >
             {!connected && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Spinner size={20} />
@@ -371,7 +431,7 @@ export function ScreenViewer() {
                 opacity: connected ? 1 : 0.15,
                 border: "5px solid #FF8300",
               }}
-              className="rounded"
+              className="rounded shadow-lg shadow-black/40"
             />
           </div>
         )}
@@ -379,21 +439,21 @@ export function ScreenViewer() {
 
       {/* D-pad */}
       {connected && (
-        <div className="flex items-center justify-center px-3 py-3 gap-4 border-t border-border-subtle bg-panel/30 shrink-0">
+        <div className="flex items-center justify-center px-3 py-4 gap-5 border-t border-border-subtle bg-panel/30 shrink-0">
           {/* Directional pad */}
-          <div className="grid grid-cols-3 grid-rows-3 gap-0.5">
+          <div className="grid grid-cols-3 grid-rows-3 gap-1">
             <div />
-            <DpadBtn icon={<ArrowUp size={12} />} onPress={() => press(KEY_UP)} ariaLabel="Up" />
+            <DpadBtn icon={<ArrowUp size={14} />} onPress={() => press(KEY_UP)} ariaLabel="Up" />
             <div />
-            <DpadBtn icon={<ArrowLeft size={12} />} onPress={() => press(KEY_LEFT)} ariaLabel="Left" />
-            <DpadBtn icon={<Check size={12} />} onPress={() => press(KEY_OK)} ariaLabel="OK" />
-            <DpadBtn icon={<ArrowRight size={12} />} onPress={() => press(KEY_RIGHT)} ariaLabel="Right" />
+            <DpadBtn icon={<ArrowLeft size={14} />} onPress={() => press(KEY_LEFT)} ariaLabel="Left" />
+            <DpadBtn icon={<Check size={14} />} onPress={() => press(KEY_OK)} ariaLabel="OK" />
+            <DpadBtn icon={<ArrowRight size={14} />} onPress={() => press(KEY_RIGHT)} ariaLabel="Right" />
             <div />
-            <DpadBtn icon={<ArrowDown size={12} />} onPress={() => press(KEY_DOWN)} ariaLabel="Down" />
+            <DpadBtn icon={<ArrowDown size={14} />} onPress={() => press(KEY_DOWN)} ariaLabel="Down" />
             <div />
           </div>
           {/* Back */}
-          <DpadBtn icon={<Undo2 size={12} />} onPress={() => press(KEY_BACK)} ariaLabel="Back" label="Back" />
+          <DpadBtn icon={<Undo2 size={14} />} onPress={() => press(KEY_BACK)} ariaLabel="Back" label="Back" />
         </div>
       )}
     </div>

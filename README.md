@@ -163,4 +163,6 @@ Please keep changes scoped and include enough detail to reproduce device-specifi
 
 ## License
 
-TBD.
+FlipperUI is licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
+
+You're free to use, modify, and distribute it for any **noncommercial** purpose — personal projects, hobby use, research, education, and noncommercial organizations are all permitted. Commercial use is not allowed under this license; if you'd like to use FlipperUI commercially, please reach out to discuss licensing.

@@ -70,10 +70,12 @@ export default function App() {
   // unrecoverable serial error. Without this the UI would keep showing
   // "connected" over a dead link.
   //
-  // After teardown we attempt a single auto-reconnect against the last-used
-  // transport (BLE id or USB port), with backoff and a small retry budget.
-  // Manual disconnects via the DevicePanel skip the retry path entirely
-  // because they don't go through `flipper-disconnected`.
+  // After teardown we may attempt a single auto-reconnect against the
+  // last-used transport (BLE id or USB port), with backoff and a small retry
+  // budget. The reconnect is gated behind the `connection.autoReconnect`
+  // setting — when off, we just clear the connection and surface the error.
+  // Manual disconnects via the DevicePanel skip this path entirely because
+  // they don't go through `flipper-disconnected`.
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -91,6 +93,8 @@ export default function App() {
       if (cancelled) return;
       const settings = await loadSettings().catch(() => null);
       if (!settings || cancelled) return;
+      // Setting may have flipped to off mid-backoff — abort cleanly.
+      if (!settings.connection.autoReconnect) return;
 
       // Bail out if a manual reconnect already succeeded while we were
       // backing off — Zustand snapshot is the source of truth.
@@ -126,12 +130,18 @@ export default function App() {
       reconnectTimerRef.current = window.setTimeout(tryReconnect, delay);
     };
 
-    listen<string>("flipper-disconnected", (event) => {
+    listen<string>("flipper-disconnected", async (event) => {
       setConnected(null);
-      setError(`Disconnected: ${event.payload} — reconnecting…`);
       void notify("Flipper disconnected", event.payload);
       cancel();
       reconnectAttemptsRef.current = 0;
+      const settings = await loadSettings().catch(() => null);
+      if (cancelled) return;
+      if (!settings?.connection.autoReconnect) {
+        setError(`Disconnected: ${event.payload}`);
+        return;
+      }
+      setError(`Disconnected: ${event.payload} — reconnecting…`);
       // Initial 500ms grace so the OS has time to release the serial port /
       // BLE peripheral before we try to grab it back.
       reconnectTimerRef.current = window.setTimeout(tryReconnect, 500);

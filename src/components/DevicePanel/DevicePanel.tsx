@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Usb, Power, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Zap, HardDrive, Bluetooth, Signal, SignalLow, SignalMedium, SignalHigh } from "lucide-react";
+import { Usb, Power, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Zap, HardDrive, Bluetooth, Signal, SignalLow, SignalMedium, SignalHigh, Link as LinkIcon, Unlink } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { connect, connectBleDevice, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
@@ -58,6 +58,7 @@ export function DevicePanel() {
   // poll loop can't snap to an arbitrary first port before we know the
   // preferred one.
   const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [autoReconnect, setAutoReconnect] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +66,7 @@ export function DevicePanel() {
       .then((s) => {
         if (cancelled) return;
         setTransport(s.connection.transport);
+        setAutoReconnect(s.connection.autoReconnect);
         if (s.connection.lastPort) {
           const state = useFlipperStore.getState();
           if (!state.selectedPort) setSelectedPort(s.connection.lastPort);
@@ -85,14 +87,16 @@ export function DevicePanel() {
     };
   }, [setSelectedPort]);
 
-  // Keep `bleTargetRef` in sync with persisted settings — BleDialog writes
-  // lastBleId/lastBleName when it connects, so this is how we pick that up
-  // without reaching across components.
+  // Keep `bleTargetRef` and the auto-reconnect flag in sync with persisted
+  // settings — BleDialog writes lastBleId/lastBleName when it connects, and
+  // SettingsPane flips autoReconnect, so this is how we pick that up without
+  // reaching across components.
   useEffect(() => {
     return subscribeSettings((s) => {
       bleTargetRef.current = s.connection.lastBleId
         ? { id: s.connection.lastBleId, name: s.connection.lastBleName }
         : null;
+      setAutoReconnect(s.connection.autoReconnect);
     });
   }, []);
 
@@ -140,9 +144,10 @@ export function DevicePanel() {
         }
 
         // Auto-connect: Flipper detected, not connected, not connecting,
-        // user hasn't manually disconnected, USB transport selected, and the
-        // target port isn't in cooldown from a recent failed attempt.
-        if (transport === "usb" && flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
+        // user hasn't manually disconnected, USB transport selected, the
+        // user has opted in via settings, and the target port isn't in
+        // cooldown from a recent failed attempt.
+        if (autoReconnect && transport === "usb" && flipper && !state.isConnected && !state.isConnecting && !userDisconnected) {
           const port = state.selectedPort ?? flipper.name;
           const lastFailedAt = failedConnectRef.current.get(port) ?? 0;
           const inCooldown = Date.now() - lastFailedAt < FAILED_CONNECT_COOLDOWN_MS;
@@ -187,7 +192,7 @@ export function DevicePanel() {
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected, transport, settingsHydrated]);
+  }, [setPorts, setSelectedPort, setConnecting, setConnected, setError, userDisconnected, transport, settingsHydrated, autoReconnect]);
 
   // Fetch power + storage info after connection
   useEffect(() => {
@@ -259,9 +264,11 @@ export function DevicePanel() {
   // BLE auto-reconnect. When the BLE link drops without an explicit user
   // disconnect, retry the last-known peripheral with exponential backoff.
   // USB has its own auto-reconnect via the port-poll loop above (it reconnects
-  // when the serial port reappears), so this only runs for BLE.
+  // when the serial port reappears), so this only runs for BLE. Gated behind
+  // the user-controlled `autoReconnect` setting.
   useEffect(() => {
     if (transport !== "ble") return;
+    if (!autoReconnect) return;
     let cancelled = false;
     let timer: number | undefined;
 
@@ -325,7 +332,7 @@ export function DevicePanel() {
       unlisten?.();
       setReconnectAttempt(null);
     };
-  }, [transport, userDisconnected, setConnected, setConnecting, setError]);
+  }, [transport, autoReconnect, userDisconnected, setConnected, setConnecting, setError]);
 
   // Poll ping latency for connection-quality indicator.
   useEffect(() => {
@@ -551,7 +558,7 @@ export function DevicePanel() {
       {showRebootConfirm && (
         <ConfirmDialog
           title="Reboot Device"
-          message="The Flipper Zero will restart. It will auto-reconnect when it comes back."
+          message="The Flipper Zero will restart. Reconnect manually after it comes back, or enable auto-reconnect in Settings."
           confirmLabel="Reboot"
           destructive
           onConfirm={handleReboot}
