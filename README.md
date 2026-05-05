@@ -161,6 +161,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Please keep changes scoped and include enough detail to reproduce device-specific bugs, including OS, Flipper firmware version, transport type, and relevant logs when possible.
 
+in love - maz <3
+
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/fuckmaz/FlipperUI.svg?variant=adaptive)](https://starchart.cc/fuckmaz/FlipperUI)
+
 ## License
 
 FlipperUI is licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
