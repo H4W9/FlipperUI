@@ -6,13 +6,117 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+No notable changes yet.
+
+## [0.3.5] — 2026-05-05
+
 ### Added
-- Drag-to-Finder export from every library row (SubGHz, Infrared, NFC, BadUSB, Apps). Shared `useExportDrag` hook underpins both the library rows and the existing File Browser drag.
-- Improved README with features list, quick-start, architecture diagram, and troubleshooting.
-- This CHANGELOG.
+- OS notifications for completed library scans, transfers, and unexpected device disconnects, with a Settings toggle.
+- Tauri notification plugin wiring across frontend and backend.
+- More polished first-release README content and GitHub-facing project presentation.
+- Release screenshot asset for the dashboard preview.
+
+### Changed
+- Refactored frontend/backend code structure for readability and maintainability.
+- Polished the Screen Stream and GIF recorder UI.
+- Replaced text-heavy Connect/Disconnect controls with compact icon controls.
+- Standardized CI artifact names for macOS, Windows, and Linux bundles.
+- Gated the native app menu to macOS so Windows does not render an unwanted gray menu strip below the title bar.
 
 ### Fixed
-- BLE `read_exact` is now atomic — no partial consumption on timeout. Fixes the intermittent "Protobuf decode error: invalid tag value: 0" that surfaced during BLE screen streaming when a frame spanned multiple notifications.
+- Improved session-management formatting and error handling.
+- Windows menu-bar appearance now follows the in-app dark UI more cleanly.
+
+## [0.3.4] — 2026-04-30
+
+### Added
+- Global Search for indexed library entries and the currently loaded File Explorer directory.
+- Search result routing into Apps, Sub-GHz, Infrared, NFC, RFID, BadUSB, and Files.
+- Windows CI bundle builds and uploaded build artifacts for macOS, Windows, and Linux.
+
+### Changed
+- Global Search now expands/collapses from the header, includes a close control, and keeps the header layout tighter.
+- Increased the default main-window height to improve dense dashboard and library layouts.
+
+### Fixed
+- Windows USB serial connection handling.
+- USB auto-connect loop on Windows by adding a cooldown after failed automatic connection attempts.
+- Error banner placement so connection and runtime errors are visible in the main layout.
+
+## [0.3.3] — 2026-04-30
+
+### Added
+- RFID / 125 kHz library with recursive scanning, metadata parsing, filtering, caching, upload, download, rename, and delete flows.
+- Sub-GHz favorites with star toggles and a starred-only filter.
+- Modified-time columns across library tables.
+- Sorting by modification time for library rows.
+- Shared formatting and path helpers for library views.
+
+### Changed
+- DevicePanel now shows a battery percentage chip with a progress bar.
+- Dashboard links to the detailed Device Info view directly.
+- Device Info was removed from the primary side rail to keep navigation focused.
+- Library upload flows no longer trigger an unnecessary full refresh after upload.
+
+### Fixed
+- BatteryChip display for firmware variants that report battery fields under different key names.
+- TypeScript and cross-platform path issues affecting macOS and Windows builds.
+- BLE auto-reconnect behavior after connection breaks.
+
+## [0.3.2] — 2026-04-28
+
+### Added
+- Visual bezel/backlight border around the Screen Stream canvas to better match the physical Flipper display.
+- DevicePanel battery chip with live percentage and charging state.
+- Dashboard quick link into the detailed Device Info page.
+
+### Changed
+- Adjusted default app height for a better first-run layout.
+- Removed an unused dashboard spinner asset.
+
+### Fixed
+- BLE screen-view reliability, including control-command queuing during active streaming.
+- Screen input handling during rapid controls and long-press style interactions.
+
+## [0.3.1] — 2026-04-27
+
+### Added
+- BLE auto-reconnect after unexpected connection breaks or failures.
+- Persisted connection type so the app remembers USB vs BLE between launches.
+- On-device Settings UI backed by files under `/int`.
+- File Explorer internal/external storage toggle.
+
+### Changed
+- Redesigned the DevicePanel info bar for clearer connected-device status.
+- BLE scan and connection logic received another round of reliability improvements.
+
+### Fixed
+- BLE screen-stream framing and reader issues.
+- Race conditions between screen streaming and control commands.
+- Storage command teardown behavior while screen streaming is active.
+
+## [0.3.0] — 2026-04-24
+
+### Added
+- Dashboard view with device overview, firmware, battery, storage, and library status.
+- Command Palette for quick navigation and device actions.
+- Drag-in uploads in the File Explorer, including folder hover targeting and a drop overlay.
+- Drag-to-Finder export hooks for library rows.
+- System tray / menubar icon with Show/Hide/Quit controls.
+- macOS Dock visibility setting for menubar-style usage.
+- Splashscreen window flow and delayed main-window reveal.
+- ESLint configuration and initial CI workflow.
+- First structured `CHANGELOG.md`.
+
+### Changed
+- README expanded with feature list, quick start, architecture notes, and troubleshooting.
+- Settings gained tray, dock, and scan-path controls.
+- File Browser upload/download behavior was tightened around progress and cancellation.
+
+### Fixed
+- BLE `read_exact` is now atomic with no partial consumption on timeout, fixing intermittent protobuf decode failures when messages span notifications.
+- CLI startup now stops an active screen stream before entering CLI mode.
+- Several storage and RPC paths now handle active screen streaming more safely.
 
 ## [0.2.3] — 2026-04-23
 
@@ -69,9 +173,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Basic file browser and device info.
 - Initial Tauri v2 scaffolding.
 
-[Unreleased]: https://github.com/your-fork/FlipperUI/compare/v0.2.3...HEAD
-[0.2.3]: https://github.com/your-fork/FlipperUI/releases/tag/v0.2.3
-[0.2.2]: https://github.com/your-fork/FlipperUI/releases/tag/v0.2.2
-[0.2.0]: https://github.com/your-fork/FlipperUI/releases/tag/v0.2.0
-[0.1.2]: https://github.com/your-fork/FlipperUI/releases/tag/v0.1.2
-[0.1.1]: https://github.com/your-fork/FlipperUI/releases/tag/v0.1.1
+[Unreleased]: https://github.com/fuckmaz/FlipperUI/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/fuckmaz/FlipperUI/releases/tag/v0.3.5
+[0.3.4]: https://github.com/fuckmaz/FlipperUI/commit/93b85cc
+[0.3.3]: https://github.com/fuckmaz/FlipperUI/commit/fc62325
+[0.3.2]: https://github.com/fuckmaz/FlipperUI/commit/7116d52
+[0.3.1]: https://github.com/fuckmaz/FlipperUI/commit/5114ac9
+[0.3.0]: https://github.com/fuckmaz/FlipperUI/commit/bf4b916
+[0.2.3]: https://github.com/fuckmaz/FlipperUI/commit/d319662
+[0.2.2]: https://github.com/fuckmaz/FlipperUI/commit/f06153f
+[0.2.0]: https://github.com/fuckmaz/FlipperUI/commit/0eadc2e
+[0.1.2]: https://github.com/fuckmaz/FlipperUI/commit/044abd8
+[0.1.1]: https://github.com/fuckmaz/FlipperUI/commit/8cc675a
+[0.1.0]: https://github.com/fuckmaz/FlipperUI/commit/88af77c
