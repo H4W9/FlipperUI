@@ -80,7 +80,7 @@ Install the prerequisites:
 Then run:
 
 ```bash
-git clone https://github.com/<owner>/FlipperUI.git
+git clone https://github.com/fuckmaz/FlipperUI.git
 cd FlipperUI
 npm install
 npm run tauri dev
