@@ -126,3 +126,4 @@ ______________________________
 [x] GIF screen-recorder - add recording-incicator (blinking red dot) and time elapsed and make gif-record-button more prominent.
 [x] Screen-Stream - improve UI in general
 [x] Dashboard - fix voltage display: 3 digits after the decimal (e.g. 4.123 V) — Dashboard.tsx BatteryCard now uses toFixed(3)
+[x] Settings - default screen-stream screenshot and GIF-recorder output directories — added screenStream.{screenshotDir,gifDir} to AppSettings, persisted via tauri-plugin-store; new "Screen Stream" section in SettingsPane with two directory pickers (folder open dialog, OS-default fallback, Clear button); ScreenViewer's saveScreenshot and stopRecording now prefix the saved filename with the configured folder so the save dialog opens at the chosen location

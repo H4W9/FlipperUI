@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Wrench,
   RadioTower,
@@ -16,6 +17,9 @@ import {
   Plug,
   X,
   Plus,
+  Folder,
+  FolderOpen,
+  MonitorPlay,
 } from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
@@ -118,6 +122,16 @@ export function SettingsPane() {
 
   const onAutoReconnectChange = async (autoReconnect: boolean) => {
     const next = await updateSettings({ connection: { autoReconnect } });
+    setSettings(next);
+  };
+
+  const onScreenshotDirChange = async (screenshotDir: string | null) => {
+    const next = await updateSettings({ screenStream: { screenshotDir } });
+    setSettings(next);
+  };
+
+  const onGifDirChange = async (gifDir: string | null) => {
+    const next = await updateSettings({ screenStream: { gifDir } });
     setSettings(next);
   };
 
@@ -235,6 +249,31 @@ export function SettingsPane() {
               disabled={!settings}
               onChange={onNotificationsEnabledChange}
               ariaLabel="OS notifications"
+            />
+          </Row>
+        </Section>
+
+        <Section icon={<MonitorPlay size={13} />} title="Screen Stream">
+          <Row
+            label="Screenshot folder"
+            hint="Default folder for `Save screenshot`. The save dialog still appears so you can rename or pick a different location each time."
+          >
+            <DirectoryPicker
+              value={settings?.screenStream.screenshotDir ?? null}
+              disabled={!settings}
+              onChange={onScreenshotDirChange}
+              ariaLabel="Choose default screenshot folder"
+            />
+          </Row>
+          <Row
+            label="GIF recording folder"
+            hint="Default folder for the GIF recorder's save dialog."
+          >
+            <DirectoryPicker
+              value={settings?.screenStream.gifDir ?? null}
+              disabled={!settings}
+              onChange={onGifDirChange}
+              ariaLabel="Choose default GIF folder"
             />
           </Row>
         </Section>
@@ -392,6 +431,61 @@ function Toggle({
         }`}
       />
     </button>
+  );
+}
+
+function DirectoryPicker({
+  value,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  value: string | null;
+  disabled?: boolean;
+  onChange: (next: string | null) => void;
+  ariaLabel: string;
+}) {
+  const pick = async () => {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      defaultPath: value ?? undefined,
+    });
+    if (typeof selected === "string") onChange(selected);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 max-w-[260px]">
+      <button
+        type="button"
+        onClick={pick}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        title={value ?? "OS default"}
+        className="flex items-center gap-1.5 px-2 py-1 text-xs text-secondary hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed min-w-0"
+      >
+        {value ? (
+          <FolderOpen size={12} className="shrink-0" />
+        ) : (
+          <Folder size={12} className="shrink-0" />
+        )}
+        <span className="truncate font-mono text-[11px]">
+          {value ?? "OS default"}
+        </span>
+      </button>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          disabled={disabled}
+          aria-label="Clear folder"
+          title="Clear folder"
+          className="p-1 text-muted hover:text-danger rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <X size={11} />
+        </button>
+      )}
+    </div>
   );
 }
 

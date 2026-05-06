@@ -51,6 +51,13 @@ export interface AppSettings {
      * disconnects). When false, no notifications are shown. */
     enabled: boolean;
   };
+  screenStream: {
+    /** Default folder for `Save screenshot`. When null, the save dialog opens
+     * at the OS default and only the filename is pre-filled. */
+    screenshotDir: string | null;
+    /** Default folder for the GIF recorder's save dialog. Same fallback rule. */
+    gifDir: string | null;
+  };
   connection: {
     /** Last-used transport. Restored on app launch. */
     transport: "usb" | "ble";
@@ -78,6 +85,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
   notifications: { enabled: true },
+  screenStream: { screenshotDir: null, gifDir: null },
   connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null, autoReconnect: false },
 };
 
@@ -109,6 +117,10 @@ export type SettingsPatch = {
   };
   notifications?: {
     enabled?: boolean;
+  };
+  screenStream?: {
+    screenshotDir?: string | null;
+    gifDir?: string | null;
   };
   connection?: {
     transport?: "usb" | "ble";
@@ -169,6 +181,16 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
     notifications: {
       enabled:
         patch.notifications?.enabled ?? current.notifications.enabled,
+    },
+    screenStream: {
+      screenshotDir:
+        patch.screenStream?.screenshotDir !== undefined
+          ? patch.screenStream.screenshotDir
+          : current.screenStream.screenshotDir,
+      gifDir:
+        patch.screenStream?.gifDir !== undefined
+          ? patch.screenStream.gifDir
+          : current.screenStream.gifDir,
     },
     connection: {
       transport: patch.connection?.transport ?? current.connection.transport,
@@ -239,6 +261,13 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
     notifications: {
       enabled:
         raw.notifications?.enabled ?? DEFAULT_SETTINGS.notifications.enabled,
+    },
+    screenStream: {
+      screenshotDir:
+        raw.screenStream?.screenshotDir ??
+        DEFAULT_SETTINGS.screenStream.screenshotDir,
+      gifDir:
+        raw.screenStream?.gifDir ?? DEFAULT_SETTINGS.screenStream.gifDir,
     },
     connection: {
       transport:

@@ -6,6 +6,7 @@ import { Monitor, ZoomIn, ZoomOut, Camera, Circle, Square, ArrowUp, ArrowDown, A
 import { GIFEncoder, applyPalette } from "gifenc";
 import { screenStreamStart, screenStreamStop, sendInputEvent } from "../../lib/tauri";
 import { base64ToUint8Array } from "../../lib/encoding";
+import { loadSettings, subscribeSettings, type AppSettings } from "../../lib/settings";
 import { Spinner } from "../ui/Spinner";
 
 const SCREEN_W = 128;
@@ -85,6 +86,17 @@ export function ScreenViewer() {
   // into a GIF when the user stops recording.
   const recordingRef = useRef<{ frames: { rgba: Uint8Array; ts: number }[]; startedAt: number } | null>(null);
 
+  // Read on demand inside save handlers so the latest persisted dirs are used
+  // even if the user changes them while the viewer is open.
+  const settingsRef = useRef<AppSettings | null>(null);
+  useEffect(() => {
+    loadSettings().then((s) => { settingsRef.current = s; }).catch(() => {});
+    return subscribeSettings((s) => { settingsRef.current = s; });
+  }, []);
+
+  const joinDir = (dir: string | null | undefined, filename: string) =>
+    dir ? `${dir.replace(/[\\/]+$/, "")}/${filename}` : filename;
+
   const zoomIn = useCallback(() => {
     setScaleIndex((i) => Math.min(SCALES.length - 1, i + 1));
   }, []);
@@ -100,7 +112,7 @@ export function ScreenViewer() {
     const bytes = base64ToUint8Array(b64);
 
     const path = await save({
-      defaultPath: "flipper-screen.png",
+      defaultPath: joinDir(settingsRef.current?.screenStream.screenshotDir, "flipper-screen.png"),
       filters: [{ name: "PNG", extensions: ["png"] }],
     });
     if (path) await writeFile(path, bytes);
@@ -133,7 +145,7 @@ export function ScreenViewer() {
     const bytes = gif.bytes();
 
     const path = await save({
-      defaultPath: "flipper-recording.gif",
+      defaultPath: joinDir(settingsRef.current?.screenStream.gifDir, "flipper-recording.gif"),
       filters: [{ name: "GIF", extensions: ["gif"] }],
     });
     if (path) await writeFile(path, bytes);
