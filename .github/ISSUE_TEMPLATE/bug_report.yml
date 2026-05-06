@@ -1,0 +1,158 @@
+name: Bug report
+description: Report something broken in FlipperUI
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for someone else to reproduce the issue.
+
+        If this is a security issue, do not open a public issue. Contact the maintainer privately instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What is the issue?
+      description: Describe the bug or broken behavior.
+      placeholder: Connecting over USB succeeds, but browsing /ext fails with an RPC timeout.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app did this happen?
+      description: Pick the main part of FlipperUI where you found the issue.
+      options:
+        - Connection manager
+        - Dashboard
+        - File Explorer
+        - Signal libraries
+        - App library
+        - Screen viewer
+        - Terminal / CLI
+        - Settings
+        - Tray / desktop integration
+        - Build / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_fix
+    attributes:
+      label: Proposed fix
+      description: Optional. If you have an idea for how to fix this, describe it here.
+      placeholder: This may need a reconnect guard before refreshing the directory, or the storage command should return a recoverable error instead of dropping the client.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Connection type
+      description: Which transport were you using when the issue happened?
+      options:
+        - USB serial
+        - BLE
+        - Both USB serial and BLE
+        - Not connected / frontend-only
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: FlipperUI version or commit
+      description: Use the release version, branch name, or commit SHA.
+      placeholder: v0.3.5 or commit abc1234
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Include OS version and architecture if known.
+      placeholder: macOS 15.4 arm64, Windows 11 x64, Ubuntu 24.04 x64
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Flipper Zero firmware
+      description: Include channel/version if this needs a connected device.
+      placeholder: Official 1.2.0, Release 1.3.0, dev build, not applicable
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps that trigger the bug.
+      placeholder: |
+        1. Connect Flipper Zero over USB
+        2. Open File Explorer
+        3. Navigate to /ext/apps
+        4. Drag a .fap file into the table
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include exact error text if shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant terminal, console, or diagnostic logs. Remove secrets or personal paths if needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings
+      description: Attach screenshots or recordings for visible UI bugs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra_context
+    attributes:
+      label: Additional context
+      description: Mention anything that may matter, such as qFlipper running, device sleep state, SD card state, large files, scan exclusions, or whether the issue started after an update.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I checked for an existing issue that describes this bug.
+          required: true
+        - label: I closed qFlipper and other serial monitors before testing USB serial behavior.
+          required: true
+        - label: I included device and firmware details when the bug requires a connected Flipper Zero.
+          required: false
+        - label: I made sure the Flipper Zero was awake and unlocked if the bug requires a connected device.
+          required: true
