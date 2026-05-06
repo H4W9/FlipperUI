@@ -9,10 +9,11 @@ a list of everything i'd like to implement sooner or l8er :)
 
 ______________________________
 
-TODO - PENDING
+TODO - IN PROGRESS
 ______________________________
 
-
+[ ] Screen-Stream - add settings for changing size of the controls
+[ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter in the toolbar
 
 
 ______________________________
@@ -20,27 +21,19 @@ ______________________________
 TODO - OPEN
 ______________________________
 
---- META ---
 
 --- FIXES / IMPROVEMENTS ---
 [ ] header polish - collapse DevicePanel chips into a compact dropdown when window is narrow so the bar doesn't overflow on small screens. Goal: device header should never wrap or clip on a 800px-wide window; the most-relevant chip (battery / signal) stays visible, the rest collapse into a "•••" popover.
 [ ] fix drag-out from library rows to Finder - useExportDrag (NFC/IR/BadUSB) silently no-ops on macOS. Drop-IN works, drop-OUT doesn't. Root cause: @crabnebula/tauri-plugin-drag's startDrag must be invoked synchronously inside the dragstart event, but we read the file off the Flipper asynchronously first — by the time startDrag is called the dragstart has already concluded and the OS never opens an NSDraggingSession. Attempted prefetch-on-hover fix did not resolve. Next directions to try: (1) pre-populate the temp file at row mount instead of on hover so it's always ready by dragstart, (2) set effectAllowed before startDrag, (3) replace @crabnebula/tauri-plugin-drag with a different mechanism (native Tauri drag or alternate plugin).
-[ ] GIF screen-recorder - add recording-incicator (blinking red dot) and time elapsed and make gif-record-button more prominent.
-[ ] Screen-Stream - improve UI in general
 
---- ASSETS ---
 
 --- NEW FEATURES ---
-[ ] favorites / starred entries per library - persisted in the per-device cache file alongside entries; optional "starred only" filter in the toolbar
 [ ] backup & restore - full device snapshot (tar /ext) to a local file, and one-click restore back onto the device
 [ ] multi-select in libraries - bulk delete / download for subghz / ir / nfc / badusb rows (File Browser already has this; libraries don't yet)
 [ ] device profile export/import - bundle app settings + all library caches for a device UID into a single JSON file so users can transplant their library index between machines without re-scanning
 [ ] cache file body (or first N KB) in library caches - today entries store only header metadata; caching the body would let BadUSB / SubGhz / IR / NFC previews and detail views work fully offline
 [ ] local↔device folder sync - pick a local folder, mirror it to a Flipper path (or vice-versa), with a diff preview before committing changes
-
---- SUBGHZ ---
 [ ] finish subghz one-click replay TX - currently disabled. Needs the correct RPC sequence (AppStart + LoadFile + ButtonPress or a variant). Stock firmware's Sub-GHz app main-menu scene doesn't register an RPC callback, and launching with a file path arg preloads the Transmitter scene but ButtonPress didn't trigger TX. Things to try next: launching with empty args + LoadFile + ButtonPress("send"); or the "Sub-GHz RPC" app variant if firmware exposes it.
-
 
 
 ______________________________
@@ -130,3 +123,6 @@ ______________________________
 [x] global search bar - GlobalSearch component mounted top-right of DevicePanel header (⌘F focuses); searches across subghz / ir / nfc / rfid / badusb / apps entry indexes plus the file browser's current directory, with grouped results capped at 6 per group / 30 total. Selecting a result calls setActiveView + setLibrarySearchInjection, and the destination library reads librarySearchInjection from the Zustand store, prefilling its local query and clearing the injection. Files are limited to the current path (no recursive index today)
 [x] enable dark-mode for menu-bar in windows — gated app.set_menu() to macOS only in src-tauri/src/lib.rs; Windows/Linux no longer get the grey native menu strip below the title bar (Cut/Copy/Paste keep working via native shortcuts; Settings is reachable via tray + sidebar)
 [x] redo README.md with all new features and screenshots
+[x] GIF screen-recorder - add recording-incicator (blinking red dot) and time elapsed and make gif-record-button more prominent.
+[x] Screen-Stream - improve UI in general
+[x] Dashboard - fix voltage display: 3 digits after the decimal (e.g. 4.123 V) — Dashboard.tsx BatteryCard now uses toFixed(3)
