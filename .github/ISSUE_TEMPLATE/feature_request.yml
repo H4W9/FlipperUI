@@ -1,0 +1,112 @@
+name: Feature request
+description: Suggest an improvement or new workflow for FlipperUI
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. The most useful requests explain the workflow, the user problem, and what would make the feature feel complete.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What is the issue or improvement?
+      description: Describe the missing workflow, rough edge, or improvement request.
+      placeholder: Add a batch rename flow for files in the File Explorer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current problem or workflow
+      description: What are you trying to do, and what is awkward or impossible today?
+      placeholder: I often copy captures from /ext/subghz and need to rename them one by one after scanning.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app does this belong?
+      description: Pick the main part of FlipperUI this request affects.
+      options:
+        - Connection manager
+        - Dashboard
+        - File Explorer
+        - Signal libraries
+        - App library
+        - Screen viewer
+        - Terminal / CLI
+        - Settings
+        - Tray / desktop integration
+        - Build / packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Device or transport requirements
+      description: Does this feature depend on a connected Flipper Zero or a specific transport?
+      options:
+        - USB serial required
+        - BLE required
+        - USB serial and BLE should both work
+        - Works offline / frontend-only
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed fix or solution
+      description: Optional. If you have an idea for how this should work, describe it here.
+      placeholder: Add a toolbar action that opens a modal with find/replace fields, a preview table, and a confirm button.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What would make this complete?
+      description: List expected outcomes, edge cases, or success criteria.
+      placeholder: |
+        - Works for files and folders
+        - Shows a preview before applying changes
+        - Handles name conflicts safely
+        - Reports per-file failures
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Are there existing workarounds, other apps, or simpler versions that would also solve the problem?
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Screenshots, mockups, or references
+      description: Add visuals, links, command examples, protocol notes, or related issues if useful.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to test this feature with a real Flipper Zero.
+          required: false
+        - label: I would be willing to open a pull request for this feature.
+          required: false
+        - label: I checked for an existing issue or discussion that already covers this request.
+          required: true
