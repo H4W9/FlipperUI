@@ -164,9 +164,9 @@ Please keep changes scoped and include enough detail to reproduce device-specifi
 
 in love - maz <3
 
+## Star History (:
 
-## Stargazers over time
-[![Stargazers over time](https://starchart.cc/fuckmaz/FlipperUI.svg?variant=adaptive)](https://starchart.cc/fuckmaz/FlipperUI)
+[![Star History Chart](https://app.repohistory.com/api/svg?repo=fuckmaz/FlipperUI&type=Timeline&background=0D1117&color=f862d3)](https://app.repohistory.com/star-history)
 
 ## License
 
