@@ -441,6 +441,7 @@ pub fn run() {
             commands::rfid::rfid_parse_paths,
             commands::badusb::badusb_scan,
             commands::badusb::badusb_cancel_scan,
+            commands::badusb::badusb_parse_paths,
             commands::apps::apps_scan,
             commands::apps::apps_cancel_scan,
             commands::apps::apps_parse_paths,

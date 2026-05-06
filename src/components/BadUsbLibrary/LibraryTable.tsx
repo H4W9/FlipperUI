@@ -7,7 +7,7 @@ import {
   ArrowDown,
   Copy,
   Download,
-  Eye,
+  FilePenLine,
   Pencil,
   Trash2,
   Check,
@@ -34,10 +34,11 @@ type SortDir = "asc" | "desc";
 
 interface Props {
   entries: BadUsbEntry[];
+  allEntries: BadUsbEntry[];
   onPreview: (entry: BadUsbEntry) => void;
 }
 
-export function LibraryTable({ entries, onPreview }: Props) {
+export function LibraryTable({ entries, allEntries, onPreview }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -95,7 +96,7 @@ export function LibraryTable({ entries, onPreview }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={entries} onPreview={onPreview} />
+                <Row entry={entry} allEntries={allEntries} onPreview={onPreview} />
               </div>
             );
           })}
@@ -295,7 +296,7 @@ function Row({
       onDoubleClick={() => {
         if (!renaming && busy === null) onPreview(entry);
       }}
-      title="Double-click to preview"
+      title="Double-click to edit"
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (
@@ -372,11 +373,11 @@ function Row({
             onPreview(entry);
           }}
           disabled={busy !== null || renaming}
-          title="Preview"
-          aria-label="Preview"
+          title="Edit"
+          aria-label="Edit"
           className="p-1 text-muted hover:text-primary rounded transition-colors disabled:opacity-30"
         >
-          <Eye size={13} />
+          <FilePenLine size={13} />
         </button>
         <button
           onClick={(e) => {

@@ -106,6 +106,60 @@ pub fn scan_library(
     Ok(entries)
 }
 
+/// Parse a specific list of BadUSB / BadKB `.txt` paths
+/// Used after editor saves so one row can be refreshed without a full `/ext/badusb` + `/ext/badkb` scan.
+pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<BadUsbEntry>> {
+    let dummy_cancel = Arc::new(AtomicBool::new(false));
+    let mut entries = Vec::with_capacity(paths.len());
+
+    for path in paths {
+        if !library_walk::has_extension_ci(path, ".txt") {
+            continue;
+        }
+        let stat = match storage::storage_stat(client, path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(?e, %path, "skipping unstattable badusb path");
+                continue;
+            }
+        };
+        if stat.r#type == 1 {
+            continue;
+        }
+
+        let kind = kind_for_path(path);
+        let mtime = storage::storage_timestamp(client, path).ok();
+        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(?e, %path, "skipping unreadable badusb path");
+                continue;
+            }
+        };
+
+        let text = String::from_utf8_lossy(&bytes);
+        let name = library_walk::file_basename(path).to_string();
+        let mut entry = parse_script(path, &name, kind, &text);
+        entry.size = stat.size;
+        entry.mtime = mtime;
+        entries.push(entry);
+    }
+
+    Ok(entries)
+}
+
+fn kind_for_path(path: &str) -> &str {
+    if path
+        .to_ascii_lowercase()
+        .trim_start_matches('/')
+        .starts_with("ext/badkb/")
+    {
+        "kb"
+    } else {
+        "usb"
+    }
+}
+
 fn walk_dir(
     client: &mut FlipperClient,
     dir: &str,
@@ -197,6 +251,13 @@ ENTER
         let e = parse_script("/ext/badkb/win.txt", "win.txt", "kb", text);
         assert_eq!(e.comment.as_deref(), Some("Windows CMD pop"));
         assert_eq!(e.kind, "kb");
+    }
+
+    #[test]
+    fn infers_kind_from_path() {
+        assert_eq!(kind_for_path("/ext/badkb/win.txt"), "kb");
+        assert_eq!(kind_for_path("/ext/badusb/mac.txt"), "usb");
+        assert_eq!(kind_for_path("/any/badusb/mac.txt"), "usb");
     }
 
     #[test]

@@ -395,6 +395,12 @@ export const badusbScan = async (
 export const badusbCancelScan = (): Promise<void> =>
   invoke<void>("badusb_cancel_scan");
 
+/** parse only BadUSB / BadKB `.txt` paths */
+export const badusbParsePaths = async (paths: string[]): Promise<BadUsbEntry[]> => {
+  await awaitCliCleanup();
+  return invoke<BadUsbEntry[]>("badusb_parse_paths", { paths });
+};
+
 // ── Apps library ────────────────────────────────────────────────────────
 
 /**

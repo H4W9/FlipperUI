@@ -6,7 +6,7 @@ use tauri::{AppHandle, State};
 use crate::commands::library_scan::run_library_scan;
 use crate::error::{FlipperError, Result};
 use crate::flipper::badusb::{self, BadUsbEntry};
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionMode};
 
 /// Recursively scan `/ext/badusb` and `/ext/badkb` for `.txt` Duckyscript
 /// files, parse their line counts + leading comments, and return the combined
@@ -57,4 +57,28 @@ pub async fn badusb_scan(
 pub fn badusb_cancel_scan(state: State<AppState>) -> Result<()> {
     state.badusb_scan_cancelled.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+/// Parse a specific list of BadUSB / BadKB `.txt` paths
+#[tauri::command(rename_all = "snake_case")]
+pub async fn badusb_parse_paths(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<BadUsbEntry>> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode == ConnectionMode::Cli {
+                return Err(FlipperError::CliModeActive);
+            }
+        }
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        badusb::parse_paths(client, &paths)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }

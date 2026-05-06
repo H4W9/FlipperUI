@@ -11,15 +11,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added a GitHub feature-request issue template with workflow, area, and transport-scoped prompts.
 - Added issue-template config enabling blank issues.
 - GitHub Sponsors metadata via `.github/FUNDING.yml` with Buy Me a Coffee support.
+- Screen Stream settings for default screenshot and GIF recording save folders.
+- Screen Viewer fullscreen mode with fullscreen sizing, keyboard toggle, and exit shortcuts.
+- Automatic Flipper clock synchronization after successful USB or BLE connection, with a Settings toggle.
+- BadUSB / BadKB DuckyScript editor backed by CodeMirror, including syntax highlighting, completions, snippets, dirty-state tracking, save/revert controls, and `Cmd/Ctrl+S`.
+- Incremental BadUSB path parsing command so edited scripts can refresh metadata without a full library rescan.
 
 ### Changed
 - README updates now include an unsigned-build disclaimer and a macOS quarantine-removal troubleshooting command.
 - README clone URL example now uses `https://github.com/fuckmaz/FlipperUI.git`.
 - README now includes a maintainer sign-off line and a Stargazers-over-time chart section.
+- README star history section now uses the RepoHistory timeline chart.
 - Backfilled and expanded `CHANGELOG.md` release history for versions `0.3.0` through `0.3.5`, including updated compare/release links.
+- Screen Viewer zoom levels now use cleaner discrete `1x` through `5x` steps.
+- BLE connection dialog now shows scan progress as status text instead of exposing a manual stop-scan button.
+- BadUSB row action and double-click behavior now open the editor instead of a read-only preview.
 
 ### Fixed
 - Dashboard battery voltage display now converts millivolts to volts in `BatteryCard` to avoid incorrectly scaled voltage values.
+- BadUSB edit saves now refresh table metadata such as line count, leading comment, size, and modified time.
+- BadUSB rename, duplicate, and delete actions now operate against the full library list instead of accidentally persisting only the currently filtered rows.
 
 ## [0.3.5] — 2026-05-05
 

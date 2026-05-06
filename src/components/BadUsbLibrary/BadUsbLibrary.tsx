@@ -8,7 +8,7 @@ import { loadBadUsbCache, saveBadUsbCache } from "../../lib/badusbCache";
 import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
-import { FilePreviewModal } from "./FilePreviewModal";
+import { BadUsbEditorModal } from "./BadUsbEditorModal";
 import type { BadUsbEntry, BadUsbScanProgress } from "../../types/badusb";
 
 const USB_ROOT = "/ext/badusb";
@@ -56,9 +56,7 @@ export function BadUsbLibrary() {
     return () => unlisten?.();
   }, [setProgress]);
 
-  // Rehydrate from disk on every deviceUid change — swaps in this device's
-  // cache (or clears it) so entries from a prior device don't linger after
-  // reconnect to a different one.
+  // Rehydrate from disk on every deviceUid change
   useEffect(() => {
     if (!deviceUid) return;
     let cancelled = false;
@@ -102,6 +100,12 @@ export function BadUsbLibrary() {
     } catch {
       /* fine — flag may have already been cleared */
     }
+  };
+
+  const onEditorSaved = async (updated: BadUsbEntry) => {
+    const next = entries.map((e) => (e.path === updated.path ? updated : e));
+    setEntries(next);
+    if (deviceUid) await saveBadUsbCache(deviceUid, next).catch(() => {});
   };
 
   const kinds = useMemo(() => {
@@ -156,9 +160,10 @@ export function BadUsbLibrary() {
       ) : (
         <LibraryTable
           entries={filtered}
+          allEntries={entries}
           onPreview={(entry) => {
             if (!isConnected) {
-              setError("Connect a Flipper to preview script contents.");
+              setError("Connect a Flipper to edit script contents.");
               return;
             }
             setPreviewEntry(entry);
@@ -167,9 +172,10 @@ export function BadUsbLibrary() {
       )}
 
       {previewEntry && (
-        <FilePreviewModal
+        <BadUsbEditorModal
           entry={previewEntry}
           onClose={() => setPreviewEntry(null)}
+          onSaved={onEditorSaved}
         />
       )}
     </div>
