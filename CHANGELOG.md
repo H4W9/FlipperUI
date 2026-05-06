@@ -6,7 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-No notable changes yet.
+### Added
+- Added a GitHub bug-report issue template with required reproduction context and environment fields.
+- Added a GitHub feature-request issue template with workflow, area, and transport-scoped prompts.
+- Added issue-template config enabling blank issues.
+- GitHub Sponsors metadata via `.github/FUNDING.yml` with Buy Me a Coffee support.
+
+### Changed
+- README updates now include an unsigned-build disclaimer and a macOS quarantine-removal troubleshooting command.
+- README clone URL example now uses `https://github.com/fuckmaz/FlipperUI.git`.
+- README now includes a maintainer sign-off line and a Stargazers-over-time chart section.
+- Backfilled and expanded `CHANGELOG.md` release history for versions `0.3.0` through `0.3.5`, including updated compare/release links.
+
+### Fixed
+- Dashboard battery voltage display now converts millivolts to volts in `BatteryCard` to avoid incorrectly scaled voltage values.
 
 ## [0.3.5] — 2026-05-05
 

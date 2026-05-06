@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.3.5-FF8300">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.3.6-FF8300">
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB">
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-backend-B7410E">
@@ -158,13 +158,7 @@ src/                               src-tauri/src/
 
 ## Contributing
 
-Issues, bug reports, and focused pull requests are welcome. Before opening a PR, run:
-
-```bash
-npm run typecheck
-npm run lint
-cargo test --manifest-path src-tauri/Cargo.toml
-```
+Issues, bug reports, and focused pull requests are welcome.
 
 Please keep changes scoped and include enough detail to reproduce device-specific bugs, including OS, Flipper firmware version, transport type, and relevant logs when possible.
 
