@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { Monitor, ZoomIn, ZoomOut, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2 } from "lucide-react";
+import { Monitor, ZoomIn, ZoomOut, Camera, Circle, Square, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Check, Undo2, Maximize, Minimize } from "lucide-react";
 import { GIFEncoder, applyPalette } from "gifenc";
 import { screenStreamStart, screenStreamStop, sendInputEvent } from "../../lib/tauri";
 import { base64ToUint8Array } from "../../lib/encoding";
@@ -11,6 +12,12 @@ import { Spinner } from "../ui/Spinner";
 
 const SCREEN_W = 128;
 const SCREEN_H = 64;
+const SCREEN_ASPECT = SCREEN_W / SCREEN_H;
+const SCREEN_FRAME_BORDER_PX = 5;
+const FULLSCREEN_PADDING_Y = 16;
+const FULLSCREEN_HEADER_ESTIMATE = 45;
+const FULLSCREEN_DPAD_ESTIMATE = 150;
+const WINDOW_CHROME_ESTIMATE = 30;
 
 // Hard cap on recording length. 60 s * ~30 fps ≈ 1800 frames; at 128×64 RGBA
 // that's ~58 MB in memory — above this the UI starts to feel it, and GIFs this
@@ -48,14 +55,11 @@ function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// Discrete zoom levels. The default sits between the prior 3× and 4× — about
-// 10% larger than the original — so the screen has more presence without
-// pushing past comfortable on smaller windows.
-const SCALES = [2, 2.6, 3.3, 4, 5] as const;
-const DEFAULT_SCALE_INDEX = 2;
+const SCALES = [1, 2, 3, 4, 5] as const;
+const DEFAULT_SCALE_INDEX = 3;
 
 function formatScale(scale: number): string {
-  return Number.isInteger(scale) ? `${scale}x` : `${scale.toFixed(1)}x`;
+  return `${scale}x`;
 }
 
 function DpadBtn({ icon, onPress, ariaLabel, label }: { icon: React.ReactNode; onPress: () => void; ariaLabel: string; label?: string }) {
@@ -74,12 +78,19 @@ function DpadBtn({ icon, onPress, ariaLabel, label }: { icon: React.ReactNode; o
 
 export function ScreenViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const screenAreaRef = useRef<HTMLDivElement>(null);
+  const dpadRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
   const [scaleIndex, setScaleIndex] = useState(DEFAULT_SCALE_INDEX);
   const scale = SCALES[scaleIndex];
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordElapsed, setRecordElapsed] = useState(0);
+  const [fullscreenScreenSize, setFullscreenScreenSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   // Ref (not state) so the frame listener sees updates without re-subscribing —
   // re-subscribing would reset the stream. Frames collected here are encoded
@@ -94,8 +105,78 @@ export function ScreenViewer() {
     return subscribeSettings((s) => { settingsRef.current = s; });
   }, []);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => !prev);
+  }, []);
+
   const joinDir = (dir: string | null | undefined, filename: string) =>
     dir ? `${dir.replace(/[\\/]+$/, "")}/${filename}` : filename;
+
+  // Lock the OS window's minimum height while fullscreen is active so the
+  // full-width stream usually fits. The canvas sizing still has its own
+  // aspect-ratio guard below, so smaller displays fall back to contain sizing
+  // instead of distorting.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const win = getCurrentWindow();
+
+    const apply = () => {
+      const innerW = window.innerWidth;
+      const reserved =
+        (headerRef.current?.offsetHeight ?? FULLSCREEN_HEADER_ESTIMATE) +
+        (dpadRef.current?.offsetHeight ?? (connected ? FULLSCREEN_DPAD_ESTIMATE : 0)) +
+        FULLSCREEN_PADDING_Y +
+        WINDOW_CHROME_ESTIMATE;
+      const minHeight = Math.ceil(innerW / SCREEN_ASPECT) + reserved;
+      void win.setMinSize(new LogicalSize(400, minHeight)).catch(() => {});
+      if (window.innerHeight < minHeight) {
+        void win.setSize(new LogicalSize(innerW, minHeight)).catch(() => {});
+      }
+    };
+
+    apply();
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      // Clear the constraint so the user can shrink the window again after
+      // exiting fullscreen.
+      void win.setMinSize(null).catch(() => {});
+    };
+  }, [isFullscreen, connected]);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setFullscreenScreenSize(null);
+      return;
+    }
+
+    const area = screenAreaRef.current;
+    if (!area) return;
+
+    const apply = () => {
+      const frameChrome = SCREEN_FRAME_BORDER_PX * 2;
+      const availableWidth = area.clientWidth - frameChrome;
+      const availableHeight = area.clientHeight - frameChrome;
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      const nextWidth = Math.floor(
+        Math.min(availableWidth, availableHeight * SCREEN_ASPECT),
+      );
+      const nextHeight = Math.floor(nextWidth / SCREEN_ASPECT);
+      setFullscreenScreenSize((prev) =>
+        prev?.width === nextWidth && prev?.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight },
+      );
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, [isFullscreen, connected]);
 
   const zoomIn = useCallback(() => {
     setScaleIndex((i) => Math.min(SCALES.length - 1, i + 1));
@@ -287,16 +368,12 @@ export function ScreenViewer() {
       held.delete(e.key);
       if (entry.longTimer != null) {
         window.clearTimeout(entry.longTimer);
-        // Quick tap — fire SHORT before RELEASE so apps that key off SHORT
-        // (e.g. menu select) react. Both PRESS and RELEASE were already / will
-        // be sent, so this matches the SHORT triplet but with realistic timing.
         enqueueInput(entry.fkey, INPUT_SHORT);
       }
       enqueueInput(entry.fkey, INPUT_RELEASE);
     };
 
-    // Window blur fires when the user alt-tabs while holding a key. Without
-    // this we'd never see keyup and the device would keep the key held down.
+    // Window blur fires when the user alt-tabs while holding a key. without this we'd never see keyup and the device would keep the key held down.
     const onBlur = () => {
       for (const [, entry] of held) {
         if (entry.longTimer != null) window.clearTimeout(entry.longTimer);
@@ -322,13 +399,41 @@ export function ScreenViewer() {
     };
   }, [connected, enqueueInput]);
 
+  // Fullscreen shortcuts: F toggles, Escape exits
+  useEffect(() => {
+    const isTextTarget = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTextTarget(e.target)) return;
+      if (!e.repeat && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === "Escape" && isFullscreen) {
+        e.preventDefault();
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleFullscreen, isFullscreen]);
+
   const width = SCREEN_W * scale;
   const height = SCREEN_H * scale;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-app overflow-hidden">
+    <div
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-app overflow-hidden"
+          : "flex-1 min-h-0 flex flex-col bg-app overflow-hidden"
+      }
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-panel/50 shrink-0">
+      <div ref={headerRef} className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-panel/50 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <Monitor size={14} className="text-accent shrink-0" />
           <span className="text-xs text-primary font-medium">Screen</span>
@@ -350,6 +455,15 @@ export function ScreenViewer() {
           )}
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={isFullscreen ? "Exit fullscreen (F / Esc)" : "Fullscreen (F)"}
+            className="p-1 text-muted hover:text-primary rounded transition-colors"
+          >
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+          </button>
+
           {/* Zoom group */}
           <div className="flex items-center gap-0.5 px-1 py-0.5 rounded border border-border-subtle bg-surface/40">
             <button
@@ -385,10 +499,10 @@ export function ScreenViewer() {
             <Camera size={14} />
           </button>
 
-          {/* Vertical divider so the record action reads as its own thing */}
+          {/* Divider */}
           <div className="w-px h-5 bg-border-subtle mx-0.5" />
 
-          {/* Prominent GIF record button — larger pill with text + colour cue */}
+          {/* Prominent GIF record button */}
           <button
             onClick={isRecording ? stopRecording : startRecording}
             disabled={!connected}
@@ -416,12 +530,25 @@ export function ScreenViewer() {
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 min-h-0 p-6 bg-app flex items-center justify-center overflow-auto">
+      <div
+        ref={screenAreaRef}
+        className={`flex-1 min-h-0 bg-app flex items-center justify-center overflow-auto ${
+          isFullscreen ? "p-2" : "p-6"
+        }`}
+      >
         {error ? (
           <div className="text-xs text-danger px-4 py-8">{error}</div>
         ) : (
           <div
-            className={`relative rounded-md transition-shadow ${
+            style={
+              isFullscreen
+                ? {
+                    width: fullscreenScreenSize?.width ?? width,
+                    height: fullscreenScreenSize?.height ?? height,
+                  }
+                : { width, height }
+            }
+            className={`relative rounded-md border-[5px] border-[#FF8300] overflow-hidden transition-shadow ${
               isRecording
                 ? "shadow-[0_0_0_2px_rgba(239,68,68,0.55),0_0_28px_4px_rgba(239,68,68,0.25)]"
                 : ""
@@ -437,13 +564,12 @@ export function ScreenViewer() {
               width={SCREEN_W}
               height={SCREEN_H}
               style={{
-                width,
-                height,
+                width: "100%",
+                height: "100%",
                 imageRendering: "pixelated",
                 opacity: connected ? 1 : 0.15,
-                border: "5px solid #FF8300",
               }}
-              className="rounded shadow-lg shadow-black/40"
+              className="block"
             />
           </div>
         )}
@@ -451,7 +577,7 @@ export function ScreenViewer() {
 
       {/* D-pad */}
       {connected && (
-        <div className="flex items-center justify-center px-3 py-4 gap-5 border-t border-border-subtle bg-panel/30 shrink-0">
+        <div ref={dpadRef} className="flex items-center justify-center px-3 py-4 gap-5 border-t border-border-subtle bg-panel/30 shrink-0">
           {/* Directional pad */}
           <div className="grid grid-cols-3 grid-rows-3 gap-1">
             <div />
