@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { connect, connectBleDevice, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { syncClockOnConnectIfEnabled } from "../../lib/clockSync";
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { BleDialog } from "./BleDialog";
@@ -110,6 +111,15 @@ export function DevicePanel() {
     void updateSettings({ connection: { lastPort: port } }).catch(() => {});
   };
 
+  const maybeSyncClockAfterConnect = async (): Promise<string | null> => {
+    try {
+      await syncClockOnConnectIfEnabled();
+      return null;
+    } catch (e) {
+      return `Clock sync failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  };
+
   // Poll for port changes every 2 seconds + auto-connect
   useEffect(() => {
     if (!settingsHydrated) return;
@@ -157,8 +167,10 @@ export function DevicePanel() {
             setError(null);
             try {
               const info = await connect(port);
+              const clockError = await maybeSyncClockAfterConnect();
               setConnected(info, "serial");
               failedConnectRef.current.delete(port);
+              if (clockError) setError(clockError);
             } catch (err) {
               setConnecting(false);
               failedConnectRef.current.set(port, Date.now());
@@ -291,10 +303,11 @@ export function DevicePanel() {
       setConnecting(true);
       try {
         const info = await connectBleDevice(target.id, target.name ?? undefined);
+        const clockError = await maybeSyncClockAfterConnect();
         if (cancelled) return;
         setConnected(info, "ble");
         setReconnectAttempt(null);
-        setError(null);
+        setError(clockError);
       } catch {
         if (cancelled) return;
         setConnecting(false);
@@ -365,7 +378,9 @@ export function DevicePanel() {
     setError(null);
     try {
       const info = await connect(selectedPort);
+      const clockError = await maybeSyncClockAfterConnect();
       setConnected(info, "serial");
+      if (clockError) setError(clockError);
     } catch (e: unknown) {
       setError(String(e));
       setConnecting(false);

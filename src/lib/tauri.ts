@@ -65,6 +65,34 @@ export const connectBleDevice = (id: string, name?: string): Promise<DeviceInfo>
 export const connectionKind = (): Promise<"serial" | "ble" | null> =>
   invoke<"serial" | "ble" | null>("connection_kind");
 
+export interface DeviceDateTime {
+  hour: number;
+  minute: number;
+  second: number;
+  day: number;
+  month: number;
+  year: number;
+  /** Monday = 1, Sunday = 7. */
+  weekday: number;
+}
+
+export function currentDeviceDateTime(date = new Date()): DeviceDateTime {
+  const jsWeekday = date.getDay(); // Sunday = 0, Monday = 1, ...
+  return {
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+    second: date.getSeconds(),
+    day: date.getDate(),
+    month: date.getMonth() + 1,
+    year: date.getFullYear(),
+    weekday: jsWeekday === 0 ? 7 : jsWeekday,
+  };
+}
+
+export const syncClock = (
+  datetime: DeviceDateTime = currentDeviceDateTime(),
+): Promise<void> => invoke<void>("sync_clock", { datetime });
+
 // ── Storage commands ───────────────────────────────────────────────────────
 
 export const storageList = async (path: string): Promise<FileEntry[]> => {

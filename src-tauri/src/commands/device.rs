@@ -10,6 +10,7 @@ use crate::error::{FlipperError, Result};
 use crate::flipper::ble::{connection::connect_ble, scanner};
 use crate::flipper::session;
 use crate::flipper::transport::TransportKind;
+use crate::pb_system;
 use crate::state::{AppState, ConnectionMode};
 
 #[derive(Serialize, Deserialize)]
@@ -31,6 +32,67 @@ pub struct DeviceInfo {
     pub hardware_uid: Option<String>,
     pub firmware_version: Option<String>,
     pub firmware_build_date: Option<String>,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct DeviceDateTime {
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    pub day: u32,
+    pub month: u32,
+    pub year: u32,
+    /// Weekday uses the Flipper/ISO shape: Monday = 1, Sunday = 7.
+    pub weekday: u32,
+}
+
+impl DeviceDateTime {
+    fn validate(self) -> Result<()> {
+        validate_range("hour", self.hour, 0, 23)?;
+        validate_range("minute", self.minute, 0, 59)?;
+        validate_range("second", self.second, 0, 59)?;
+        validate_range("month", self.month, 1, 12)?;
+        validate_range("year", self.year, 2000, 2099)?;
+        validate_range("weekday", self.weekday, 1, 7)?;
+        let max_day = days_in_month(self.year, self.month);
+        validate_range("day", self.day, 1, max_day)?;
+        Ok(())
+    }
+
+    fn into_proto(self) -> pb_system::DateTime {
+        pb_system::DateTime {
+            hour: self.hour,
+            minute: self.minute,
+            second: self.second,
+            day: self.day,
+            month: self.month,
+            year: self.year,
+            weekday: self.weekday,
+        }
+    }
+}
+
+fn validate_range(label: &str, value: u32, min: u32, max: u32) -> Result<()> {
+    if value < min || value > max {
+        return Err(FlipperError::Session(format!(
+            "Invalid datetime {label}: expected {min}..={max}, got {value}",
+        )));
+    }
+    Ok(())
+}
+
+fn days_in_month(year: u32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 31,
+    }
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 /// Flipper Zero's USB VID/PID — the device exposes itself as a STM32 virtual
@@ -342,6 +404,29 @@ pub async fn ping(state: State<'_, AppState>) -> Result<u32> {
         let started = std::time::Instant::now();
         session::ping(client)?;
         Ok(started.elapsed().as_millis().min(u32::MAX as u128) as u32)
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
+}
+
+/// Sync the Flipper Zero RTC to a host-provided local date/time.
+#[tauri::command]
+pub async fn sync_clock(datetime: DeviceDateTime, state: State<'_, AppState>) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        datetime.validate()?;
+
+        let conn_mode = mode_mutex.lock().unwrap();
+        if *conn_mode == ConnectionMode::Cli {
+            return Err(FlipperError::CliModeActive);
+        }
+        drop(conn_mode);
+
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        session::set_datetime(client, datetime.into_proto())
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?

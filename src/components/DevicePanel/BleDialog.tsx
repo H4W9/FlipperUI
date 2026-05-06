@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bluetooth, Signal, Square, RefreshCw } from "lucide-react";
+import { Bluetooth, Signal, RefreshCw } from "lucide-react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   startBleScan,
@@ -10,6 +10,7 @@ import {
 import { Spinner } from "../ui/Spinner";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { updateSettings } from "../../lib/settings";
+import { syncClockOnConnectIfEnabled } from "../../lib/clockSync";
 
 interface BleDialogProps {
   onClose: () => void;
@@ -70,8 +71,7 @@ export function BleDialog({ onClose }: BleDialogProps) {
     setDevices([]);
   };
 
-  // Subscribe to live discovery events, kick off the scan, and tear everything
-  // down on unmount (including stopping a still-running scan).
+  // Subscribe to live discovery events, kick off the scan, and tear everything down on unmount.
   useEffect(() => {
     let unlistenDevice: UnlistenFn | null = null;
     let unlistenStopped: UnlistenFn | null = null;
@@ -126,9 +126,14 @@ export function BleDialog({ onClose }: BleDialogProps) {
     setStoreError(null);
     try {
       const info = await connectBleDevice(device.id, device.name);
+      let clockError: string | null = null;
+      try {
+        await syncClockOnConnectIfEnabled();
+      } catch (e) {
+        clockError = `Clock sync failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
       setConnected(info, "ble");
-      // Remember this peripheral so the auto-reconnect path in DevicePanel
-      // can re-pair if the BLE link drops without an explicit disconnect.
+      if (clockError) setStoreError(clockError);
       void updateSettings({
         connection: { lastBleId: device.id, lastBleName: device.name },
       }).catch(() => {});
@@ -160,19 +165,17 @@ export function BleDialog({ onClose }: BleDialogProps) {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
             <Bluetooth size={14} className="text-accent" />
-            Connect over Bluetooth
+            Connect via BLE
           </h3>
           {scanning ? (
-            <button
-              onClick={stop}
-              disabled={connectingId !== null}
-              className="flex items-center gap-1.5 text-xs text-secondary hover:text-primary disabled:opacity-40 px-2 py-1 rounded transition-colors"
-              title="Stop scanning"
+            <span
+              className="flex items-center gap-1.5 text-xs text-secondary px-2 py-1"
+              role="status"
+              aria-live="polite"
             >
               <Spinner size={12} />
               <span>Scanning…</span>
-              <Square size={11} className="ml-0.5" />
-            </button>
+            </span>
           ) : (
             <button
               onClick={handleRescan}
@@ -189,7 +192,7 @@ export function BleDialog({ onClose }: BleDialogProps) {
         <p className="text-xs text-secondary mb-3">
           Pair the Flipper in your OS Bluetooth settings first. BLE supports
           files, screen, and apps — but not CLI. Devices appear as they're
-          discovered; the scan keeps running until you stop it.
+          discovered; the scan runs until you connect or close the dialog.
         </p>
 
         {error && (

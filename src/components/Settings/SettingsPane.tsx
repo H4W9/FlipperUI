@@ -125,6 +125,11 @@ export function SettingsPane() {
     setSettings(next);
   };
 
+  const onSyncClockOnConnectChange = async (syncClockOnConnect: boolean) => {
+    const next = await updateSettings({ connection: { syncClockOnConnect } });
+    setSettings(next);
+  };
+
   const onScreenshotDirChange = async (screenshotDir: string | null) => {
     const next = await updateSettings({ screenStream: { screenshotDir } });
     setSettings(next);
@@ -235,6 +240,17 @@ export function SettingsPane() {
               disabled={!settings}
               onChange={onAutoReconnectChange}
               ariaLabel="Auto-connect and auto-reconnect"
+            />
+          </Row>
+          <Row
+            label="Sync clock on connect"
+            hint="Set the Flipper RTC from this computer's local date and time after each successful USB or BLE connection."
+          >
+            <Toggle
+              checked={settings?.connection.syncClockOnConnect ?? true}
+              disabled={!settings}
+              onChange={onSyncClockOnConnectChange}
+              ariaLabel="Sync clock on connect"
             />
           </Row>
         </Section>

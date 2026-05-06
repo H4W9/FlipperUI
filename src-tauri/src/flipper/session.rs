@@ -170,6 +170,25 @@ pub fn get_power_info(client: &mut FlipperClient) -> Result<HashMap<String, Stri
     Ok(info)
 }
 
+/// Set the Flipper's RTC to the supplied local date/time.
+pub fn set_datetime(client: &mut FlipperClient, datetime: pb_system::DateTime) -> Result<()> {
+    let id = client.next_command_id();
+    let req = pb::Main {
+        command_id: id,
+        command_status: 0,
+        has_next: false,
+        content: Some(Content::SystemSetDatetimeRequest(
+            pb_system::SetDateTimeRequest {
+                datetime: Some(datetime),
+            },
+        )),
+    };
+    write_message(&mut *client.transport, &req)?;
+    let resp = read_response(&mut *client.transport)?;
+    check_response(&resp, id)?;
+    Ok(())
+}
+
 /// Reboot the Flipper Zero.
 /// mode: 0 = OS (normal), 1 = DFU, 2 = UPDATE
 pub fn reboot(client: &mut FlipperClient, mode: i32) -> Result<()> {

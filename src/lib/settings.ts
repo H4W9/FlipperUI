@@ -72,6 +72,9 @@ export interface AppSettings {
      * auto-reconnects after an unexpected drop. When false, the user must
      * click Connect manually. */
     autoReconnect: boolean;
+    /** When true, sync the Flipper RTC to the host's local clock after
+     * every successful USB or BLE connection. */
+    syncClockOnConnect: boolean;
   };
 }
 
@@ -86,7 +89,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
   notifications: { enabled: true },
   screenStream: { screenshotDir: null, gifDir: null },
-  connection: { transport: "usb", lastPort: null, lastBleId: null, lastBleName: null, autoReconnect: false },
+  connection: {
+    transport: "usb",
+    lastPort: null,
+    lastBleId: null,
+    lastBleName: null,
+    autoReconnect: false,
+    syncClockOnConnect: true,
+  },
 };
 
 export type SettingsPatch = {
@@ -128,6 +138,7 @@ export type SettingsPatch = {
     lastBleId?: string | null;
     lastBleName?: string | null;
     autoReconnect?: boolean;
+    syncClockOnConnect?: boolean;
   };
 };
 
@@ -208,6 +219,9 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
           : current.connection.lastBleName,
       autoReconnect:
         patch.connection?.autoReconnect ?? current.connection.autoReconnect,
+      syncClockOnConnect:
+        patch.connection?.syncClockOnConnect ??
+        current.connection.syncClockOnConnect,
     },
   };
   await store.set(STORE_KEY, next);
@@ -281,6 +295,9 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
       autoReconnect:
         raw.connection?.autoReconnect ??
         DEFAULT_SETTINGS.connection.autoReconnect,
+      syncClockOnConnect:
+        raw.connection?.syncClockOnConnect ??
+        DEFAULT_SETTINGS.connection.syncClockOnConnect,
     },
   };
 }
