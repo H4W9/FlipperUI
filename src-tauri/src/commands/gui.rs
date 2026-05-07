@@ -90,11 +90,7 @@ pub async fn screen_stream_start(state: State<'_, AppState>, app: AppHandle) -> 
 // Tauri v2 defaults argument names to camelCase; `rename_all` keeps
 // the frontend's existing snake_case calling convention.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn send_input_event(
-    key: i32,
-    input_type: i32,
-    state: State<'_, AppState>,
-) -> Result<()> {
+pub async fn send_input_event(key: i32, input_type: i32, state: State<'_, AppState>) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
     let screen_stream_active = Arc::clone(&state.screen_stream_active);

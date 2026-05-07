@@ -17,10 +17,9 @@ pub fn validate_path(path: &str) -> Result<()> {
             "Path traversal (..) is not allowed".into(),
         ));
     }
-    let ok = VALID_ROOTS.iter().any(|root| {
-        path == *root
-            || path.starts_with(&format!("{root}/"))
-    });
+    let ok = VALID_ROOTS
+        .iter()
+        .any(|root| path == *root || path.starts_with(&format!("{root}/")));
     if !ok {
         return Err(FlipperError::Session(
             "Path must start with /ext, /int, or /any".into(),
@@ -35,7 +34,14 @@ mod tests {
 
     #[test]
     fn accepts_valid_roots_and_subpaths() {
-        for p in ["/ext", "/int", "/any", "/ext/foo", "/int/a/b/c.txt", "/any/x"] {
+        for p in [
+            "/ext",
+            "/int",
+            "/any",
+            "/ext/foo",
+            "/int/a/b/c.txt",
+            "/any/x",
+        ] {
             assert!(validate_path(p).is_ok(), "should accept {p}");
         }
     }
