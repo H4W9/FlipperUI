@@ -1,13 +1,25 @@
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::commands::client::with_client;
+use crate::commands::path::validate_path;
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::flipper::storage;
 use crate::pb_storage;
-use crate::state::{AppState, ConnectionMode};
+use crate::state::AppState;
+
+fn join_remote(dir: &str, name: &str) -> String {
+    if dir.ends_with('/') {
+        format!("{dir}{name}")
+    } else {
+        format!("{dir}/{name}")
+    }
+}
 
 /// Mirror of pb_storage::File for the frontend, with base64-encoded data.
 #[derive(Serialize, Deserialize)]
@@ -27,73 +39,6 @@ impl From<pb_storage::File> for FileEntry {
             size: f.size,
             md5sum: f.md5sum,
         }
-    }
-}
-
-/// Validate that a Flipper storage path is safe (no traversal, must be absolute).
-fn validate_path(path: &str) -> Result<()> {
-    if path.contains("..") {
-        return Err(FlipperError::Session(
-            "Path traversal (..) is not allowed".into(),
-        ));
-    }
-    if !path.starts_with("/ext") && !path.starts_with("/int") && !path.starts_with("/any") {
-        return Err(FlipperError::Session(
-            "Path must start with /ext, /int, or /any".into(),
-        ));
-    }
-    Ok(())
-}
-
-/// Run a closure with exclusive access to the connected FlipperClient.
-/// Rejects the call if the device is in CLI mode.
-///
-/// Errors are split into two classes:
-/// - **Fatal** (transport/framing-level): Serial/Io/Decode/Encode. The wire
-///   state is unrecoverable, so the client is dropped and the user must
-///   reconnect. The screen reader (if running) will pick up the cleared mutex
-///   on its next iteration and emit `flipper-disconnected`.
-/// - **Transient** (protocol-level): Rpc/Timeout/UnexpectedResponse/Session/
-///   etc. The connection is still healthy; the request just didn't go through.
-///   Surface the error to the caller without touching the client. This is
-///   crucial during an active screen stream — a single failed `power_info` or
-///   `storage_info` poll used to nuke the entire connection and the stream.
-fn with_client<T>(
-    mode_mutex: &Arc<Mutex<ConnectionMode>>,
-    client_mutex: &Arc<Mutex<Option<FlipperClient>>>,
-    f: impl FnOnce(&mut FlipperClient) -> Result<T>,
-) -> Result<T> {
-    {
-        let mode = mode_mutex.lock().unwrap();
-        if *mode == ConnectionMode::Cli {
-            return Err(FlipperError::CliModeActive);
-        }
-    }
-    let mut guard = client_mutex.lock().unwrap();
-    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-    match f(client) {
-        Ok(v) => Ok(v),
-        Err(e) => {
-            if is_fatal_transport_error(&e) {
-                tracing::warn!("with_client tearing down connection: {e}");
-                *guard = None;
-            } else {
-                tracing::debug!("with_client transient error (connection kept): {e}");
-            }
-            Err(e)
-        }
-    }
-}
-
-/// True for errors that mean the byte-stream/framing is unrecoverable.
-/// Anything else (RPC status errors, timeouts, validation) leaves the
-/// connection healthy.
-fn is_fatal_transport_error(e: &FlipperError) -> bool {
-    match e {
-        FlipperError::Serial(_) => true,
-        FlipperError::Io(io) => io.kind() != std::io::ErrorKind::TimedOut,
-        FlipperError::Decode(_) | FlipperError::Encode(_) => true,
-        _ => false,
     }
 }
 
@@ -395,6 +340,139 @@ pub fn cancel_transfer(state: State<AppState>) -> Result<()> {
         .transfer_cancelled
         .store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(())
+}
+
+/// Sum the byte size of every file under `path`, recursively. Used as the
+/// denominator for whole-folder download progress.
+fn sum_tree_bytes(client: &mut FlipperClient, path: &str) -> Result<u64> {
+    let mut total: u64 = 0;
+    let mut queue: Vec<String> = vec![path.to_string()];
+    while let Some(dir) = queue.pop() {
+        let entries = storage::storage_list(client, &dir)?;
+        for e in entries {
+            let sub = join_remote(&dir, &e.name);
+            if e.r#type == 1 {
+                queue.push(sub);
+            } else {
+                total = total.saturating_add(e.size as u64);
+            }
+        }
+    }
+    Ok(total)
+}
+
+/// Download `remote_dir` into `local_dir` recursively. `local_dir` is the
+/// fully-resolved destination — directory contents land directly inside it,
+/// not under a wrapper folder. The wrapper is created by the caller so that
+/// behaviour is explicit at the command boundary.
+fn download_dir_recursive(
+    client: &mut FlipperClient,
+    remote_dir: &str,
+    local_dir: &Path,
+    total_bytes: u64,
+    bytes_done: &mut u64,
+    on_progress: &dyn Fn(u64, u64),
+    cancelled: &Arc<AtomicBool>,
+) -> Result<()> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(FlipperError::TransferCancelled);
+    }
+    std::fs::create_dir_all(local_dir)?;
+    let entries = storage::storage_list(client, remote_dir)?;
+    for e in entries {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(FlipperError::TransferCancelled);
+        }
+        let remote_sub = join_remote(remote_dir, &e.name);
+        let local_sub = local_dir.join(&e.name);
+        if e.r#type == 1 {
+            download_dir_recursive(
+                client,
+                &remote_sub,
+                &local_sub,
+                total_bytes,
+                bytes_done,
+                on_progress,
+                cancelled,
+            )?;
+        } else {
+            let start = *bytes_done;
+            let file_size = e.size as u64;
+            let data = storage::storage_read(
+                client,
+                &remote_sub,
+                |received, _| {
+                    let cumulative = start.saturating_add(received as u64);
+                    on_progress(cumulative.min(total_bytes), total_bytes);
+                },
+                cancelled,
+            )?;
+            std::fs::write(&local_sub, &data)?;
+            *bytes_done = bytes_done.saturating_add(file_size);
+            on_progress(*bytes_done, total_bytes);
+        }
+    }
+    Ok(())
+}
+
+/// Recursively download a Flipper directory to a local destination.
+///
+/// `local_path` is the full destination folder; the caller is responsible for
+/// appending the source directory's name (so picking `~/Downloads` for `apps`
+/// passes `~/Downloads/apps` here). The folder is created if missing; existing
+/// files at colliding paths are overwritten.
+///
+/// Emits `"download-progress"` events as `u32` percentages (0-100) computed
+/// against the pre-walked total byte count, so the bar advances smoothly
+/// across many files.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn storage_read_dir_to_local(
+    path: String,
+    local_path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let cancelled = Arc::clone(&state.transfer_cancelled);
+    cancelled.store(false, Ordering::Relaxed);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        validate_path(&path)?;
+        let local_root = PathBuf::from(local_path);
+        with_client(&mode_mutex, &client_mutex, |c| {
+            let total_bytes = sum_tree_bytes(c, &path)?;
+            // Emit 0% up front so the bar shows even before the first chunk
+            // arrives (the pre-walk is fast but not instant on big trees).
+            let _ = app.emit("download-progress", 0u32);
+
+            let mut bytes_done: u64 = 0;
+            let on_progress = |done: u64, total: u64| {
+                let pct = if total == 0 {
+                    100
+                } else {
+                    ((done.saturating_mul(100)) / total).min(100) as u32
+                };
+                let _ = app.emit("download-progress", pct);
+            };
+
+            download_dir_recursive(
+                c,
+                &path,
+                &local_root,
+                total_bytes,
+                &mut bytes_done,
+                &on_progress,
+                &cancelled,
+            )?;
+
+            // Empty folders: ensure final 100% lands so the UI clears cleanly.
+            let _ = app.emit("download-progress", 100u32);
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Extract a .tar archive on the Flipper.

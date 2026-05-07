@@ -11,74 +11,85 @@ use crate::state::{AppState, ConnectionMode};
 
 /// Enter CLI mode: stop the RPC session and start a reader thread that
 /// emits `"cli-output"` events for every chunk of text the Flipper sends.
-///
-/// This is intentionally synchronous — the working serial I/O is brief and
-/// spawn_blocking introduces issues with poll(POLLOUT) on macOS USB CDC.
 #[tauri::command]
-pub fn cli_start(state: State<AppState>, app: AppHandle) -> Result<()> {
-    // Check mode
-    {
-        let mode = state.mode.lock().unwrap();
-        if *mode == ConnectionMode::Cli {
-            return Ok(());
-        }
-    }
-
-    // Stop screen stream if active — it conflicts with CLI mode
-    if state.screen_stream_active.swap(false, Ordering::SeqCst) {
-        tracing::info!("CLI: stopping active screen stream before entering CLI");
-        // Clear input event channel
-        let mut tx_guard = state.input_event_tx.lock().unwrap();
-        *tx_guard = None;
-    }
-
-    // Enter CLI mode on the serial port. BLE has no raw text CLI.
-    {
-        let mut guard = state.client.lock().unwrap();
-        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-        if client.kind() == TransportKind::Ble {
-            return Err(FlipperError::BleUnsupported);
-        }
-        cli::enter_cli_mode(client)?;
-    }
-
-    // Update mode
-    {
-        let mut mode = state.mode.lock().unwrap();
-        *mode = ConnectionMode::Cli;
-    }
-
-    // Activate the reader thread
-    state.cli_reader_active.store(true, Ordering::Relaxed);
-
-    let active = Arc::clone(&state.cli_reader_active);
+pub async fn cli_start(state: State<'_, AppState>, app: AppHandle) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+    let screen_stream_active = Arc::clone(&state.screen_stream_active);
+    let input_event_tx = Arc::clone(&state.input_event_tx);
+    let cli_reader_active = Arc::clone(&state.cli_reader_active);
 
-    std::thread::spawn(move || {
-        cli_reader_loop(active, client_mutex, app);
-    });
+    tauri::async_runtime::spawn_blocking(move || -> Result<()> {
+        // Check mode
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode == ConnectionMode::Cli {
+                return Ok(());
+            }
+        }
 
-    Ok(())
+        // Stop screen stream if active — it conflicts with CLI mode
+        if screen_stream_active.swap(false, Ordering::SeqCst) {
+            tracing::info!("CLI: stopping active screen stream before entering CLI");
+            let mut tx_guard = input_event_tx.lock().unwrap();
+            *tx_guard = None;
+        }
+
+        // Enter CLI mode on the serial port. BLE has no raw text CLI.
+        {
+            let mut guard = client_mutex.lock().unwrap();
+            let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+            if client.kind() == TransportKind::Ble {
+                return Err(FlipperError::BleUnsupported);
+            }
+            cli::enter_cli_mode(client)?;
+        }
+
+        // Update mode
+        {
+            let mut mode = mode_mutex.lock().unwrap();
+            *mode = ConnectionMode::Cli;
+        }
+
+        // Activate the reader thread
+        cli_reader_active.store(true, Ordering::Relaxed);
+
+        let active = Arc::clone(&cli_reader_active);
+        let client_mutex = Arc::clone(&client_mutex);
+        std::thread::spawn(move || {
+            cli_reader_loop(active, client_mutex, app);
+        });
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Send a text command to the Flipper CLI.
 /// The command is written as raw bytes followed by `\r`.
 #[tauri::command]
-pub fn cli_send(input: String, state: State<AppState>) -> Result<()> {
-    {
-        let mode = state.mode.lock().unwrap();
-        if *mode != ConnectionMode::Cli {
-            return Err(FlipperError::Session("Not in CLI mode".into()));
+pub async fn cli_send(input: String, state: State<'_, AppState>) -> Result<()> {
+    let client_mutex = Arc::clone(&state.client);
+    let mode_mutex = Arc::clone(&state.mode);
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<()> {
+        {
+            let mode = mode_mutex.lock().unwrap();
+            if *mode != ConnectionMode::Cli {
+                return Err(FlipperError::Session("Not in CLI mode".into()));
+            }
         }
-    }
 
-    let mut guard = state.client.lock().unwrap();
-    let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
-    let cmd = format!("{}\r", input);
-    client.transport.write_all(cmd.as_bytes())?;
-    client.transport.flush()?;
-
-    Ok(())
+        let mut guard = client_mutex.lock().unwrap();
+        let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
+        let cmd = format!("{}\r", input);
+        client.transport.write_all(cmd.as_bytes())?;
+        client.transport.flush()?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| FlipperError::Internal(e.to_string()))?
 }
 
 /// Leave CLI mode: stop the reader thread and re-enter RPC mode.

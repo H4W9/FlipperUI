@@ -62,12 +62,17 @@ export function SubGhzLibrary() {
   // Stream scan progress events from the Rust side.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<ScanProgress>("subghz-scan-progress", (e) =>
       setProgress(e.payload),
     ).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setProgress]);
 
   // Hydrate from the on-disk cache the moment we know which device we're on.

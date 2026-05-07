@@ -7,11 +7,11 @@
 <p align="center">
   <strong>A fast, native desktop manager for Flipper Zero.</strong>
   <br>
-  File browsing, signal libraries, app management, live screen control, and CLI access in one focused Tauri app.
+  File browsing, signal libraries, app management, live screen control with built-in GIF-Recording, DuckyScript Editor and CLI access in one focused app.
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.3.6-FF8300">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.4.0-FF8300">
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB">
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-backend-B7410E">
@@ -33,9 +33,9 @@ FlipperUI is built for people who use their Flipper Zero often and want a deskto
 - **Full file explorer** for browsing `/ext` and `/int`, with upload, download, rename, delete, mkdir, breadcrumb navigation, progress reporting, cancelable transfers, and drag-and-drop upload.
 - **Organized signal libraries** for Sub-GHz, Infrared, NFC, RFID, and BadUSB files, with recursive scans, parsed metadata, filtering, cached indexes, and offline browsing after a scan.
 - **App library** for `.fap` files, including recursive app scans, categories, embedded icon extraction, drag-and-drop install, and launch/exit support.
-- **Live screen viewer** with real-time 128x64 display mirroring, keyboard/D-pad input, long-press support, screenshots, and GIF recording.
-- **Serial CLI terminal** with streaming output, command history, and Ctrl+C support for power users.
-- **Dashboard and search tools** with device stats, library counts, global search, and a command palette for quick navigation and actions.
+- **Live screen viewer** with real-time 128x64 display mirroring, keyboard/D-pad input, screenshots and built-in GIF recording.
+- **Serial CLI terminal** with streaming output, command history.
+- **Dashboard and search tools** with device stats, library counts, global search, and a GUI for flipper settings normally only changable in an editor.
 - **Desktop integration** with tray/menubar controls, OS notifications, app settings, and developer diagnostics for inspecting protobuf traffic.
 
 ## Feature Tour

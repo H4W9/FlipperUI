@@ -357,7 +357,7 @@ function BatteryCard({
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 text-[11px]">
-            <Metric label="Voltage" value={voltage != null ? `${voltage*0.001} V` : "-"} />
+            <Metric label="Voltage" value={voltage != null ? `${(voltage * 0.001).toFixed(3)} V` : "—"} />
             <Metric
               label="Current"
               value={current != null ? `${Math.round(current)} mA` : "—"}

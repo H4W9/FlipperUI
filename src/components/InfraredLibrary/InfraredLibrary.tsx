@@ -45,12 +45,17 @@ export function InfraredLibrary() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<IrScanProgress>("infrared-scan-progress", (e) =>
       setProgress(e.payload),
     ).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setProgress]);
 
   // Rehydrate from disk on every deviceUid change; clears stale entries from

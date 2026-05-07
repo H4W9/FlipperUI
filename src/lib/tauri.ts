@@ -131,6 +131,20 @@ export const storageReadToLocal = async (
   return invoke<void>("storage_read_to_local", { path, local_path: localPath });
 };
 
+/**
+ * Recursively download a Flipper directory into a local destination folder.
+ * `localPath` is the full destination — directory contents land directly
+ * inside it (caller appends the source folder's name). Emits cumulative
+ * `download-progress` events (u32 0-100) across the whole tree.
+ */
+export const storageReadDirToLocal = async (
+  path: string,
+  localPath: string,
+): Promise<void> => {
+  await awaitCliCleanup();
+  return invoke<void>("storage_read_dir_to_local", { path, local_path: localPath });
+};
+
 export const storageWriteFromLocal = async (
   path: string,
   localPath: string,

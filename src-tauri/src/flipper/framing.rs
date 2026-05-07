@@ -6,6 +6,12 @@ use crate::flipper::transport::Transport;
 use crate::pb;
 use crate::pb::main::Content;
 
+/// Hard cap on a single PB.Main frame. Real Flipper RPC messages are well
+/// under 64 KB (largest payload is a 512-byte storage chunk plus envelope);
+/// 1 MiB is a generous ceiling that still bounds memory if a corrupt or
+/// malicious stream announces a huge length prefix.
+pub const MAX_FRAME_SIZE: usize = 1 << 20;
+
 /// Read a protobuf-style varint from the transport.
 ///
 /// Returns a u32 message length. Errors if the decoded value exceeds u32::MAX
@@ -81,6 +87,11 @@ fn encode_varint(mut value: u64, buf: &mut [u8; 10]) -> usize {
 /// `BleTransport` already push back any partial body bytes on their side.)
 pub fn read_message(t: &mut dyn Transport) -> Result<pb::Main> {
     let len = read_varint(t)?;
+    if (len as usize) > MAX_FRAME_SIZE {
+        return Err(FlipperError::Decode(prost::DecodeError::new(format!(
+            "frame length {len} exceeds MAX_FRAME_SIZE ({MAX_FRAME_SIZE})"
+        ))));
+    }
     let mut buf = vec![0u8; len as usize];
     if let Err(e) = t.read_exact(&mut buf) {
         let mut varint_buf = [0u8; 10];

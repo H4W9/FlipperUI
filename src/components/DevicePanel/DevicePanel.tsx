@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Usb, Power, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Zap, HardDrive, Bluetooth, Signal, SignalLow, SignalMedium, SignalHigh, Link as LinkIcon, Unlink } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { connect, connectBleDevice, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
+import { connect, disconnect, listPorts, powerInfo, storageInfo, reboot, ping } from "../../lib/tauri";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
 import { syncClockOnConnectIfEnabled } from "../../lib/clockSync";
@@ -49,11 +48,6 @@ export function DevicePanel() {
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
   const [showBleDialog, setShowBleDialog] = useState(false);
   const [transport, setTransport] = useState<"usb" | "ble">("usb");
-  // BLE auto-reconnect target (id + display name). Set after every successful
-  // BLE connect (manual or auto), and hydrated from persisted settings on mount
-  // so a fresh app launch can resume where the last session left off.
-  const bleTargetRef = useRef<{ id: string; name: string | null } | null>(null);
-  const [reconnectAttempt, setReconnectAttempt] = useState<number | null>(null);
   // Hydrate transport + last-used port from persisted settings on first mount.
   // Until this resolves, settings-driven port auto-select is suppressed so the
   // poll loop can't snap to an arbitrary first port before we know the
@@ -72,12 +66,6 @@ export function DevicePanel() {
           const state = useFlipperStore.getState();
           if (!state.selectedPort) setSelectedPort(s.connection.lastPort);
         }
-        if (s.connection.lastBleId) {
-          bleTargetRef.current = {
-            id: s.connection.lastBleId,
-            name: s.connection.lastBleName,
-          };
-        }
       })
       .catch(() => {})
       .finally(() => {
@@ -88,15 +76,9 @@ export function DevicePanel() {
     };
   }, [setSelectedPort]);
 
-  // Keep `bleTargetRef` and the auto-reconnect flag in sync with persisted
-  // settings — BleDialog writes lastBleId/lastBleName when it connects, and
-  // SettingsPane flips autoReconnect, so this is how we pick that up without
-  // reaching across components.
+  // Keep autoReconnect in sync with persisted settings — SettingsPane flips it.
   useEffect(() => {
     return subscribeSettings((s) => {
-      bleTargetRef.current = s.connection.lastBleId
-        ? { id: s.connection.lastBleId, name: s.connection.lastBleName }
-        : null;
       setAutoReconnect(s.connection.autoReconnect);
     });
   }, []);
@@ -273,79 +255,9 @@ export function DevicePanel() {
     if (isConnected && userDisconnected) setUserDisconnected(false);
   }, [isConnected, userDisconnected]);
 
-  // BLE auto-reconnect. When the BLE link drops without an explicit user
-  // disconnect, retry the last-known peripheral with exponential backoff.
-  // USB has its own auto-reconnect via the port-poll loop above (it reconnects
-  // when the serial port reappears), so this only runs for BLE. Gated behind
-  // the user-controlled `autoReconnect` setting.
-  useEffect(() => {
-    if (transport !== "ble") return;
-    if (!autoReconnect) return;
-    let cancelled = false;
-    let timer: number | undefined;
-
-    const attempt = async (n: number) => {
-      // Bail conditions checked on every attempt — userDisconnected can flip
-      // mid-backoff if the user clicks Disconnect, and we don't want to
-      // reconnect after that.
-      const target = bleTargetRef.current;
-      const state = useFlipperStore.getState();
-      if (cancelled || userDisconnected || !target) {
-        setReconnectAttempt(null);
-        return;
-      }
-      if (state.isConnected || state.isConnecting) {
-        setReconnectAttempt(null);
-        return;
-      }
-
-      setReconnectAttempt(n);
-      setConnecting(true);
-      try {
-        const info = await connectBleDevice(target.id, target.name ?? undefined);
-        const clockError = await maybeSyncClockAfterConnect();
-        if (cancelled) return;
-        setConnected(info, "ble");
-        setReconnectAttempt(null);
-        setError(clockError);
-      } catch {
-        if (cancelled) return;
-        setConnecting(false);
-        // 5 attempts with 1s, 2s, 4s, 8s, 16s backoff. After that we stop and
-        // let the user retry manually — endless retries on a truly offline
-        // device just spam the BLE adapter.
-        if (n >= 5) {
-          setReconnectAttempt(null);
-          setError("BLE auto-reconnect gave up after 5 attempts");
-          return;
-        }
-        const delay = 1000 * 2 ** n;
-        timer = window.setTimeout(() => void attempt(n + 1), delay);
-      }
-    };
-
-    let unlisten: (() => void) | undefined;
-    listen<string>("flipper-disconnected", () => {
-      if (cancelled) return;
-      // Only kick off reconnect when this is an unexpected drop (the user
-      // didn't click Disconnect) and we have a peripheral to reconnect to.
-      if (userDisconnected) return;
-      if (!bleTargetRef.current) return;
-      // First retry after 1s — gives the BLE stack a moment to free the
-      // peripheral handle before we redial.
-      timer = window.setTimeout(() => void attempt(1), 1000);
-    }).then((u) => {
-      if (cancelled) u();
-      else unlisten = u;
-    });
-
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-      unlisten?.();
-      setReconnectAttempt(null);
-    };
-  }, [transport, autoReconnect, userDisconnected, setConnected, setConnecting, setError]);
+  // BLE/USB auto-reconnect on `flipper-disconnected` is handled centrally in
+  // App.tsx — having a second reconnect chain here would race the App-level one
+  // for the BLE adapter on every drop.
 
   // Poll ping latency for connection-quality indicator.
   useEffect(() => {
@@ -486,24 +398,11 @@ export function DevicePanel() {
           <button
             onClick={() => setShowBleDialog(true)}
             disabled={isConnecting}
-            aria-label={
-              reconnectAttempt != null
-                ? `Reconnecting (${reconnectAttempt}/5)`
-                : isConnecting
-                ? "Connecting"
-                : "Connect"
-            }
-            title={
-              reconnectAttempt != null
-                ? `Reconnecting… (${reconnectAttempt}/5)`
-                : isConnecting
-                ? "Connecting…"
-                : "Connect"
-            }
+            aria-label={isConnecting ? "Connecting" : "Connect"}
+            title={isConnecting ? "Connecting…" : "Connect"}
             className="flex items-center justify-center gap-1.5 px-2 py-1 text-xs bg-accent-dim hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             {isConnecting ? <Spinner size={14} /> : <LinkIcon size={14} />}
-            {reconnectAttempt != null ? <span>{reconnectAttempt}/5</span> : null}
           </button>
         )
       ) : (

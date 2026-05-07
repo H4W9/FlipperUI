@@ -78,7 +78,7 @@ export function BleDialog({ onClose }: BleDialogProps) {
     let cancelled = false;
 
     (async () => {
-      unlistenDevice = await listen<BleDevice>("ble-scan-device", (e) => {
+      const u1 = await listen<BleDevice>("ble-scan-device", (e) => {
         const d = e.payload;
         const map = devicesRef.current;
         const existing = map.get(d.id);
@@ -94,9 +94,14 @@ export function BleDialog({ onClose }: BleDialogProps) {
         map.set(d.id, merged);
         setDevices(sortDevices(Array.from(map.values())));
       });
-      unlistenStopped = await listen("ble-scan-stopped", () => {
+      if (cancelled) { u1(); return; }
+      unlistenDevice = u1;
+
+      const u2 = await listen("ble-scan-stopped", () => {
         setScanning(false);
       });
+      if (cancelled) { u2(); return; }
+      unlistenStopped = u2;
 
       if (!cancelled) await start();
     })();

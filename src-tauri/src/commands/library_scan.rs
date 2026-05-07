@@ -5,25 +5,10 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::commands::path::validate_path;
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::state::ConnectionMode;
-
-/// Shared path-validation used by every library scan command.
-/// Rejects traversal (`..`) and roots outside the Flipper's virtual FS.
-fn validate_root(path: &str) -> Result<()> {
-    if path.contains("..") {
-        return Err(FlipperError::Session(
-            "Path traversal (..) is not allowed".into(),
-        ));
-    }
-    if !path.starts_with("/ext") && !path.starts_with("/int") && !path.starts_with("/any") {
-        return Err(FlipperError::Session(
-            "Path must start with /ext, /int, or /any".into(),
-        ));
-    }
-    Ok(())
-}
 
 #[derive(Serialize, Clone)]
 struct ScanProgressEvent<'a> {
@@ -64,7 +49,7 @@ where
     ) -> Result<Vec<E>>,
 {
     for root in roots {
-        validate_root(root)?;
+        validate_path(root)?;
     }
     {
         let mode = mode_mutex.lock().unwrap();

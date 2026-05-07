@@ -4,6 +4,7 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import {
   storageList,
   storageReadToLocal,
+  storageReadDirToLocal,
   storageWriteFromLocal,
   storageMkdir,
   storageDelete,
@@ -55,6 +56,47 @@ export function useStorage() {
       await storageReadToLocal(remotePath, savePath);
       setTransferProgress(100);
       void notify("Download complete", name);
+    } catch (e: unknown) {
+      failed = true;
+      const msg = String(e);
+      if (!msg.includes("Transfer cancelled")) {
+        setError(msg);
+      }
+    } finally {
+      unlisten?.();
+      if (failed) {
+        setTransferProgress(null);
+      } else {
+        setTimeout(() => setTransferProgress(null), 600);
+      }
+    }
+  }, [setError, setTransferProgress]);
+
+  // Recursive folder download: pick a parent directory, then mirror the
+  // remote tree under `<picked>/<folderName>`. Reuses the same
+  // `download-progress` event stream as single-file downloads.
+  const downloadFolder = useCallback(async (name: string) => {
+    const currentPath = useFlipperStore.getState().currentPath;
+    const remotePath = joinPath(currentPath, name);
+    let unlisten: (() => void) | undefined;
+    let failed = false;
+    try {
+      const parentDir = await open({ directory: true, multiple: false });
+      if (!parentDir || Array.isArray(parentDir)) return;
+      const sep = parentDir.includes("\\") && !parentDir.includes("/") ? "\\" : "/";
+      const localDest = parentDir.endsWith(sep)
+        ? `${parentDir}${name}`
+        : `${parentDir}${sep}${name}`;
+
+      setTransferProgress(0);
+
+      unlisten = await listen<number>("download-progress", (event) => {
+        setTransferProgress(event.payload);
+      });
+
+      await storageReadDirToLocal(remotePath, localDest);
+      setTransferProgress(100);
+      void notify("Folder download complete", name);
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);
@@ -154,5 +196,5 @@ export function useStorage() {
     }
   }, [setError, refresh]);
 
-  return { refresh, download, upload, uploadFile, mkdir, rename, remove };
+  return { refresh, download, downloadFolder, upload, uploadFile, mkdir, rename, remove };
 }

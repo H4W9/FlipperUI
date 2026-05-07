@@ -86,7 +86,8 @@ export function FileBrowser() {
         }
       })
       .then((fn) => {
-        unlisten = fn;
+        if (cancelled) fn();
+        else unlisten = fn;
       });
 
     return () => {

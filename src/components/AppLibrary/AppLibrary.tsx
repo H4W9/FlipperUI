@@ -65,12 +65,17 @@ export function AppLibrary() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<AppScanProgress>("apps-scan-progress", (e) =>
       setProgress(e.payload),
     ).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setProgress]);
 
   useEffect(() => {
@@ -257,7 +262,8 @@ export function AppLibrary() {
         }
       })
       .then((fn) => {
-        unlisten = fn;
+        if (cancelled) fn();
+        else unlisten = fn;
       });
     return () => {
       cancelled = true;

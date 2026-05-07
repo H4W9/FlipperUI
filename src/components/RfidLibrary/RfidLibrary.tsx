@@ -48,12 +48,17 @@ export function RfidLibrary() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<RfidScanProgress>("rfid-scan-progress", (e) =>
       setProgress(e.payload),
     ).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setProgress]);
 
   // Rehydrate from disk on every deviceUid change — swaps in the new device's

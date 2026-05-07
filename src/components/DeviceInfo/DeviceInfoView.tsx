@@ -442,7 +442,7 @@ function BatteryTile({ power }: { power: Record<string, string> | null }) {
       }
     >
       <Row label="Charge" value={formatPercent(charge)} />
-      <Row label="Voltage" value={formatNumber(voltage, " V", 2)} />
+      <Row label="Voltage" value={formatVoltage(voltage)} />
       <Row label="Current" value={formatNumber(current, " mA", 0)} />
       <Row label="Temperature" value={formatNumber(temperature, " °C", 1)} />
       <Row label="Capacity" value={formatNumber(capacityRemain, " mAh", 0)} />
@@ -549,6 +549,14 @@ function formatNumber(
   const n = Number(v);
   if (Number.isNaN(n)) return `${v}${unit}`;
   return `${n.toFixed(decimals)}${unit}`;
+}
+
+// Firmware reports battery_voltage in millivolts; convert to volts.
+function formatVoltage(v: string | undefined | null): string | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (Number.isNaN(n)) return `${v} V`;
+  return `${(n * 0.001).toFixed(3)} V`;
 }
 
 // Accepts both "27-03-2026" and "2026-03-27"-ish firmware strings; pass-through if

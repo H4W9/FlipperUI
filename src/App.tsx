@@ -95,9 +95,7 @@ export default function App() {
       if (!settings || cancelled) return;
       // Setting may have flipped to off mid-backoff — abort cleanly.
       if (!settings.connection.autoReconnect) return;
-
-      // Bail out if a manual reconnect already succeeded while we were
-      // backing off — Zustand snapshot is the source of truth.
+    
       if (useFlipperStore.getState().isConnected) {
         reconnectAttemptsRef.current = 0;
         return;
@@ -120,7 +118,7 @@ export default function App() {
           return;
         }
       } catch {
-        // Fall through to schedule the next attempt.
+        
       }
 
       // Exponential backoff capped at ~10s, give up after 5 tries.
@@ -142,11 +140,11 @@ export default function App() {
         return;
       }
       setError(`Disconnected: ${event.payload} — reconnecting…`);
-      // Initial 500ms grace so the OS has time to release the serial port /
-      // BLE peripheral before we try to grab it back.
+      // Initial 500ms grace so the OS has time to release the serial port / BLE peripheral
       reconnectTimerRef.current = window.setTimeout(tryReconnect, 500);
     }).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
     return () => {
       cancelled = true;
@@ -158,22 +156,32 @@ export default function App() {
   // Native menu (Cmd+, / FlipperUI → Settings…) navigates to the Settings view.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen("open-settings", () => setActiveView("settings")).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setActiveView]);
 
   // Tray flyout navigation shortcuts emit "tray-nav" with the view name.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<string>("tray-nav", (event) => {
       const view = event.payload as ActiveView;
       setActiveView(view);
     }).then((u) => {
-      unlisten = u;
+      if (cancelled) u();
+      else unlisten = u;
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [setActiveView]);
 
   return (
@@ -206,14 +214,12 @@ function ActivePane({
     return <SettingsPane />;
   }
 
-  // Dashboard works while disconnected — it shows cached library counts and
-  // an offline placeholder where live stats would go.
+  // Dashboard works while disconnected
   if (activeView === "dashboard") {
     return <Dashboard />;
   }
 
-  // Cached libraries stay browsable while offline. The scan/upload/row
-  // actions degrade inside the view itself — see each library component.
+  // Cached libraries stay browsable while offline.
   if (activeView === "subghz" && (isConnected || subghzCount > 0)) {
     return <SubGhzLibrary />;
   }
@@ -239,7 +245,6 @@ function ActivePane({
   if (activeView === "cli") return <CliPanel />;
   if (activeView === "screen") return <ScreenViewer />;
 
-  // activeView === "files"
   return (
     <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
       <FileBrowser />

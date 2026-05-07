@@ -6,24 +6,11 @@ use base64::Engine;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::commands::path::validate_path;
 use crate::error::{FlipperError, Result};
 use crate::flipper::apps::{self, AppEntry};
 use crate::flipper::{fap_icon, storage};
 use crate::state::{AppState, ConnectionMode};
-
-fn validate_root(path: &str) -> Result<()> {
-    if path.contains("..") {
-        return Err(FlipperError::Session(
-            "Path traversal (..) is not allowed".into(),
-        ));
-    }
-    if !path.starts_with("/ext") && !path.starts_with("/int") && !path.starts_with("/any") {
-        return Err(FlipperError::Session(
-            "Path must start with /ext, /int, or /any".into(),
-        ));
-    }
-    Ok(())
-}
 
 #[derive(Serialize, Clone)]
 struct ScanProgress<'a> {
@@ -49,7 +36,7 @@ pub async fn apps_scan(
 
     tauri::async_runtime::spawn_blocking(move || {
         for r in &roots {
-            validate_root(r)?;
+            validate_path(r)?;
         }
         {
             let mode = mode_mutex.lock().unwrap();
@@ -110,7 +97,7 @@ pub async fn apps_parse_paths(
 
     tauri::async_runtime::spawn_blocking(move || {
         for r in &roots {
-            validate_root(r)?;
+            validate_path(r)?;
         }
         {
             let mode = mode_mutex.lock().unwrap();

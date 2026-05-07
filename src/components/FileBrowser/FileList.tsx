@@ -139,19 +139,17 @@ function ContextMenu({
       >
         <Pencil size={12} className="text-secondary" /> Rename
       </div>
-      {!isDir && (
-        <div
-          role="menuitem"
-          className={item}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onDownload();
-            onClose();
-          }}
-        >
-          <Download size={12} className="text-secondary" /> Download
-        </div>
-      )}
+      <div
+        role="menuitem"
+        className={item}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onDownload();
+          onClose();
+        }}
+      >
+        <Download size={12} className="text-secondary" /> Download
+      </div>
       {isTar && (
         <div
           role="menuitem"
@@ -411,7 +409,7 @@ export function FileList() {
   const isLoading = useFlipperStore((s) => s.isLoading);
   const currentPath = useFlipperStore((s) => s.currentPath);
   const setError = useFlipperStore((s) => s.setError);
-  const { download, remove, refresh } = useStorage();
+  const { download, downloadFolder, remove, refresh } = useStorage();
 
   const [renamingName, setRenamingName] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -650,7 +648,11 @@ export function FileList() {
           {...contextMenu}
           onClose={() => setContextMenu(null)}
           onRename={() => setRenamingName(contextMenu.entry.name)}
-          onDownload={() => download(contextMenu.entry.name)}
+          onDownload={() =>
+            contextMenu.entry.file_type === 1
+              ? downloadFolder(contextMenu.entry.name)
+              : download(contextMenu.entry.name)
+          }
           onDelete={() => remove(contextMenu.entry.name, contextMenu.entry.file_type === 1)}
           onExtractTar={() => handleExtractTar(contextMenu.entry)}
         />
