@@ -448,11 +448,11 @@ pub async fn storage_read_dir_to_local(
 
             let mut bytes_done: u64 = 0;
             let on_progress = |done: u64, total: u64| {
-                let pct = if total == 0 {
-                    100
-                } else {
-                    ((done.saturating_mul(100)) / total).min(100) as u32
-                };
+                let pct = done
+                    .saturating_mul(100)
+                    .checked_div(total)
+                    .map(|v| v.min(100) as u32)
+                    .unwrap_or(100);
                 let _ = app.emit("download-progress", pct);
             };
 
