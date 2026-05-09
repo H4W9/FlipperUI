@@ -332,7 +332,9 @@ export function DevicePanel() {
       <Usb size={18} className="text-accent shrink-0" />
 
       {/* Title */}
-      <span className="font-semibold text-sm text-white">FlipperUI</span>
+      <span className="font-semibold text-sm text-white">
+        Flipper<span className="text-accent">UI</span>
+      </span>
 
       <div className="w-px h-4 bg-elevated mx-1" />
 

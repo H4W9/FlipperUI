@@ -5,9 +5,9 @@
 </p>
 
 <p align="center">
-  <strong>A fast, native desktop manager for Flipper Zero.</strong>
+  <strong>The fastest, most complete all-in-one desktop manager for Flipper Zero.</strong>
   <br>
-  File browsing, signal libraries, app management, live screen control with built-in GIF-Recording, DuckyScript Editor and CLI access in one focused app.
+  File browsing, signal libraries, app management, live screen control with built-in GIF-Recording, full DuckyScript Editor and direct CLI access in one application.
 </p>
 
 <p align="center">
