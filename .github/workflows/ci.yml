@@ -166,45 +166,81 @@ jobs:
             npm run tauri build -- --ci
           fi
 
-      # Upload the resulting bundles for each target as workflow artifacts so
-      # they can be downloaded from the Actions UI.
-      - name: Upload bundle (Windows)
+      # Upload each bundle format as its own artifact so they are
+      # individually downloadable from the Actions UI.
+
+      # --- Windows ---
+      - name: Upload MSI (Windows)
         if: matrix.label == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Windows
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Windows_msi
           if-no-files-found: error
-          path: |
-            src-tauri/${{ matrix.bundle_path }}/msi/*.msi
-            src-tauri/${{ matrix.bundle_path }}/nsis/*.exe
+          path: src-tauri/${{ matrix.bundle_path }}/msi/*.msi
 
-      - name: Upload bundle (macOS Apple Silicon)
+      - name: Upload Setup EXE (Windows)
+        if: matrix.label == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Windows_setup
+          if-no-files-found: error
+          path: src-tauri/${{ matrix.bundle_path }}/nsis/*.exe
+
+      # --- macOS Apple Silicon ---
+      - name: Upload DMG (macOS Apple Silicon)
         if: matrix.label == 'macOS-AppleSilicon'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-AppleSilicon
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-AppleSilicon_dmg
           if-no-files-found: error
-          path: |
-            src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
-            src-tauri/${{ matrix.bundle_path }}/macos/*.app
+          path: src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
 
-      - name: Upload bundle (macOS Intel)
+      - name: Upload App (macOS Apple Silicon)
+        if: matrix.label == 'macOS-AppleSilicon'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-AppleSilicon_app
+          if-no-files-found: error
+          path: src-tauri/${{ matrix.bundle_path }}/macos/*.app
+
+      # --- macOS Intel ---
+      - name: Upload DMG (macOS Intel)
         if: matrix.label == 'macOS-Intel'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-Intel
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-Intel_dmg
           if-no-files-found: error
-          path: |
-            src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
-            src-tauri/${{ matrix.bundle_path }}/macos/*.app
+          path: src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
 
-      - name: Upload bundle (Linux)
+      - name: Upload App (macOS Intel)
+        if: matrix.label == 'macOS-Intel'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-Intel_app
+          if-no-files-found: error
+          path: src-tauri/${{ matrix.bundle_path }}/macos/*.app
+
+      # --- Linux ---
+      - name: Upload DEB (Linux)
         if: matrix.label == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Linux
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Linux_deb
           if-no-files-found: error
-          path: |
-            src-tauri/${{ matrix.bundle_path }}/deb/*.deb
-            src-tauri/${{ matrix.bundle_path }}/rpm/*.rpm
-            src-tauri/${{ matrix.bundle_path }}/appimage/*.AppImage
+          path: src-tauri/${{ matrix.bundle_path }}/deb/*.deb
+
+      - name: Upload RPM (Linux)
+        if: matrix.label == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Linux_rpm
+          if-no-files-found: error
+          path: src-tauri/${{ matrix.bundle_path }}/rpm/*.rpm
+
+      - name: Upload AppImage (Linux)
+        if: matrix.label == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Linux_AppImage
+          if-no-files-found: error
+          path: src-tauri/${{ matrix.bundle_path }}/appimage/*.AppImage
