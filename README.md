@@ -12,8 +12,8 @@
 
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-0.4.0-FF8300">
-  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB">
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-backend-B7410E">
   <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue">
   <img alt="Status" src="https://img.shields.io/badge/status-pre--release-yellow">

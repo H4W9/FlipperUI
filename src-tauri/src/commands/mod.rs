@@ -1,4 +1,5 @@
 pub mod app;
+pub mod app_icon;
 pub mod apps;
 pub mod badusb;
 pub mod cli;

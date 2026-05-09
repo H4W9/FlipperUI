@@ -1,3 +1,4 @@
+pub mod app_icon;
 pub mod commands;
 pub mod error;
 pub mod flipper;
@@ -385,6 +386,15 @@ pub fn run() {
             // `set_tray_enabled`, so the build logic lives in a shared helper.
             install_tray(app.handle(), commands::tray::tray_monochrome())?;
 
+            // App-icon variant — read the saved choice from settings.json
+            // (written by the frontend) and apply it before the main window
+            // becomes visible. On macOS this means the Dock shows the chosen
+            // icon from launch with no orange-then-dark flash.
+            let variant = app_icon::load_saved_variant(app.handle());
+            if let Err(e) = app_icon::apply_app_icon(app.handle(), variant) {
+                tracing::warn!("app-icon: initial apply failed: {e}");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -452,6 +462,8 @@ pub fn run() {
             commands::tray::set_dock_visible,
             commands::tray::set_tray_monochrome,
             commands::tray::update_tray_status,
+            commands::app_icon::app_icon_variants,
+            commands::app_icon::set_app_icon,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -51,6 +51,12 @@ export interface AppSettings {
      * disconnects). When false, no notifications are shown. */
     enabled: boolean;
   };
+  appearance: {
+    /** Selected app-icon variant id. Resolved server-side: unknown values
+     * fall back to "default" without erroring. New variants can be added
+     * without changing this type — the value is just a string. */
+    appIcon: string;
+  };
   screenStream: {
     /** Default folder for `Save screenshot`. When null, the save dialog opens
      * at the OS default and only the filename is pre-filled. */
@@ -88,6 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
   notifications: { enabled: true },
+  appearance: { appIcon: "default" },
   screenStream: { screenshotDir: null, gifDir: null },
   connection: {
     transport: "usb",
@@ -127,6 +134,9 @@ export type SettingsPatch = {
   };
   notifications?: {
     enabled?: boolean;
+  };
+  appearance?: {
+    appIcon?: string;
   };
   screenStream?: {
     screenshotDir?: string | null;
@@ -192,6 +202,9 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
     notifications: {
       enabled:
         patch.notifications?.enabled ?? current.notifications.enabled,
+    },
+    appearance: {
+      appIcon: patch.appearance?.appIcon ?? current.appearance.appIcon,
     },
     screenStream: {
       screenshotDir:
@@ -275,6 +288,10 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
     notifications: {
       enabled:
         raw.notifications?.enabled ?? DEFAULT_SETTINGS.notifications.enabled,
+    },
+    appearance: {
+      appIcon:
+        raw.appearance?.appIcon ?? DEFAULT_SETTINGS.appearance.appIcon,
     },
     screenStream: {
       screenshotDir:

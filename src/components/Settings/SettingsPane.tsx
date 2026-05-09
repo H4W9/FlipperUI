@@ -4,11 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Wrench,
-  RadioTower,
-  Radio,
-  Tv,
-  Nfc,
-  Usb,
   LayoutGrid,
   Languages,
   Info,
@@ -20,10 +15,14 @@ import {
   Folder,
   FolderOpen,
   MonitorPlay,
+  Palette,
+  Filter,
 } from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
 import { useDirectorySuggestions } from "../../lib/useDirectorySuggestions";
+import { appIconVariants, setAppIcon, type AppIconVariant } from "../../lib/tauri";
+import { LibraryExclusionsEditor } from "./LibraryExclusionsEditor";
 
 const IS_MACOS =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
@@ -34,45 +33,17 @@ export function SettingsPane() {
   const [version, setVersion] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [iconVariants, setIconVariants] = useState<AppIconVariant[]>([]);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
     loadSettings().then(setSettings).catch(() => {});
+    appIconVariants().then(setIconVariants).catch(() => {});
     return subscribeSettings(setSettings);
   }, []);
 
   const onLanguageChange = async (lang: string) => {
     const next = await updateSettings({ language: lang });
-    setSettings(next);
-  };
-
-  const onSubghzExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ subghz: { excludedDirs } });
-    setSettings(next);
-  };
-
-  const onInfraredExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ infrared: { excludedDirs } });
-    setSettings(next);
-  };
-
-  const onNfcExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ nfc: { excludedDirs } });
-    setSettings(next);
-  };
-
-  const onRfidExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ rfid: { excludedDirs } });
-    setSettings(next);
-  };
-
-  const onBadUsbExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ badusb: { excludedDirs } });
-    setSettings(next);
-  };
-
-  const onAppsExcludedChange = async (excludedDirs: string[]) => {
-    const next = await updateSettings({ apps: { excludedDirs } });
     setSettings(next);
   };
 
@@ -140,6 +111,32 @@ export function SettingsPane() {
     setSettings(next);
   };
 
+  const onAppIconChange = async (variantId: string) => {
+    // Persist first so a crash mid-apply doesn't strand the user with the
+    // selection but the wrong actual icon. Then apply live; if the live
+    // application fails we revert the persisted value to keep them in sync.
+    const previous = settings?.appearance.appIcon ?? "default";
+    if (previous === variantId) return;
+    const next = await updateSettings({ appearance: { appIcon: variantId } });
+    setSettings(next);
+    try {
+      const applied = await setAppIcon(variantId);
+      if (applied !== variantId) {
+        // Backend resolved the id to something else (unknown variant fell
+        // back to default). Reflect the canonical id in settings.
+        const corrected = await updateSettings({
+          appearance: { appIcon: applied },
+        });
+        setSettings(corrected);
+      }
+    } catch {
+      const reverted = await updateSettings({
+        appearance: { appIcon: previous },
+      });
+      setSettings(reverted);
+    }
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-4">
@@ -182,6 +179,28 @@ export function SettingsPane() {
               ))}
             </select>
           </Row>
+        </Section>
+
+        <Section icon={<Palette size={13} />} title="Appearance">
+          <Row
+            label="App icon"
+            hint={
+              IS_MACOS
+                ? "Pick the icon used in the Dock and switcher. Changes apply immediately."
+                : "Pick the icon used in the taskbar and Start menu. Changes apply immediately."
+            }
+          >
+            {/* Empty slot — the chooser sits below as a full-width grid. */}
+            <span className="text-[11px] text-dim">
+              {iconVariants.length} {iconVariants.length === 1 ? "option" : "options"}
+            </span>
+          </Row>
+          <AppIconChooser
+            variants={iconVariants}
+            selected={settings?.appearance.appIcon ?? "default"}
+            disabled={!settings || iconVariants.length === 0}
+            onChange={onAppIconChange}
+          />
         </Section>
 
         <Section icon={<MonitorCog size={13} />} title="System">
@@ -294,50 +313,11 @@ export function SettingsPane() {
           </Row>
         </Section>
 
-        <Section icon={<RadioTower size={13} />} title="Sub-GHz">
-          <ExcludedDirsEditor
-            rootPath="/ext/subghz"
-            value={settings?.subghz.excludedDirs ?? []}
+        <Section icon={<Filter size={13} />} title="Library Exclusions">
+          <LibraryExclusionsEditor
+            settings={settings}
             disabled={!settings}
-            onChange={onSubghzExcludedChange}
-          />
-        </Section>
-
-        <Section icon={<Tv size={13} />} title="Infrared">
-          <ExcludedDirsEditor
-            rootPath="/ext/infrared"
-            value={settings?.infrared.excludedDirs ?? []}
-            disabled={!settings}
-            onChange={onInfraredExcludedChange}
-          />
-        </Section>
-
-        <Section icon={<Nfc size={13} />} title="NFC">
-          <ExcludedDirsEditor
-            rootPath="/ext/nfc"
-            value={settings?.nfc.excludedDirs ?? []}
-            disabled={!settings}
-            onChange={onNfcExcludedChange}
-          />
-        </Section>
-
-        <Section icon={<Radio size={13} />} title="RFID (125 kHz)">
-          <ExcludedDirsEditor
-            rootPath="/ext/lfrfid"
-            value={settings?.rfid.excludedDirs ?? []}
-            disabled={!settings}
-            onChange={onRfidExcludedChange}
-          />
-        </Section>
-
-        <Section icon={<Usb size={13} />} title="BadUSB">
-          <AbsoluteDirListEditor
-            heading="Excluded directories"
-            description="Paths skipped during the BadUSB / BadKB library scan. Must live under /ext/badusb or /ext/badkb."
-            placeholder="/ext/badusb/private"
-            disabled={!settings}
-            value={settings?.badusb.excludedDirs ?? []}
-            onChange={onBadUsbExcludedChange}
+            onChange={setSettings}
           />
         </Section>
 
@@ -350,14 +330,6 @@ export function SettingsPane() {
             value={settings?.apps.extraDirs ?? []}
             reserved={["/ext/apps"]}
             onChange={onAppsExtraChange}
-          />
-          <AbsoluteDirListEditor
-            heading="Excluded directories"
-            description="Paths skipped during the app-library scan."
-            placeholder="/ext/apps/Examples"
-            disabled={!settings}
-            value={settings?.apps.excludedDirs ?? []}
-            onChange={onAppsExcludedChange}
           />
         </Section>
 
@@ -450,6 +422,69 @@ function Toggle({
   );
 }
 
+function AppIconChooser({
+  variants,
+  selected,
+  disabled,
+  onChange,
+}: {
+  variants: AppIconVariant[];
+  selected: string;
+  disabled?: boolean;
+  onChange: (id: string) => void;
+}) {
+  if (variants.length === 0) {
+    return (
+      <div className="text-[11px] text-dim italic">Loading icons…</div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-3">
+      {variants.map((v) => {
+        const isSelected = v.id === selected;
+        return (
+          <button
+            key={v.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(v.id)}
+            aria-pressed={isSelected}
+            aria-label={`Use ${v.label} app icon`}
+            title={v.label}
+            className={`group relative flex flex-col items-center gap-1.5 rounded-lg p-2 border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              isSelected
+                ? "border-accent bg-accent/10"
+                : "border-border-subtle bg-surface/40 hover:bg-surface/60 hover:border-border"
+            }`}
+          >
+            <div
+              className={`w-16 h-16 rounded-lg overflow-hidden bg-panel border ${
+                isSelected ? "border-accent" : "border-border-subtle"
+              }`}
+            >
+              <img
+                src={`data:image/png;base64,${v.png_base64}`}
+                alt=""
+                width={64}
+                height={64}
+                className="w-full h-full object-contain"
+                draggable={false}
+              />
+            </div>
+            <span
+              className={`text-[11px] ${
+                isSelected ? "text-primary font-medium" : "text-secondary"
+              }`}
+            >
+              {v.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function DirectoryPicker({
   value,
   disabled,
@@ -505,129 +540,11 @@ function DirectoryPicker({
   );
 }
 
-function ExcludedDirsEditor({
-  rootPath,
-  value,
-  disabled,
-  onChange,
-}: {
-  rootPath: string;
-  value: string[];
-  disabled: boolean;
-  onChange: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const datalistId = useId();
-  const suggestions = useDirectorySuggestions(draft, rootPath, {
-    exclude: value,
-  });
-
-  const prefix = `${rootPath}/`;
-  const samplePath = `${rootPath}/private`;
-
-  const add = () => {
-    const trimmed = draft.trim().replace(/\/+$/, "");
-    if (!trimmed) return;
-    if (!trimmed.startsWith(prefix)) {
-      setValidationError(`Path must start with ${prefix}`);
-      return;
-    }
-    if (trimmed === rootPath) {
-      setValidationError("Cannot exclude the scan root itself");
-      return;
-    }
-    if (trimmed.includes("..")) {
-      setValidationError("Path traversal (..) is not allowed");
-      return;
-    }
-    if (value.includes(trimmed)) {
-      setValidationError("Already in the list");
-      return;
-    }
-    setValidationError(null);
-    setDraft("");
-    onChange([...value, trimmed].sort());
-  };
-
-  const remove = (path: string) => {
-    onChange(value.filter((p) => p !== path));
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col">
-        <span className="text-xs text-primary">Excluded directories</span>
-        <span className="text-[11px] text-dim mt-0.5">
-          Paths skipped during the library scan. Must live under{" "}
-          <code className="text-secondary">{prefix}</code>, e.g.{" "}
-          <code className="text-secondary">{samplePath}</code>.
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (validationError) setValidationError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") add();
-          }}
-          disabled={disabled}
-          placeholder={samplePath}
-          list={datalistId}
-          autoComplete="off"
-          className="flex-1 bg-surface border border-border-subtle rounded px-2 py-1 text-xs text-primary placeholder:text-dim focus:outline-none focus:border-accent disabled:opacity-50"
-        />
-        <datalist id={datalistId}>
-          {suggestions.map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
-        <button
-          onClick={add}
-          disabled={disabled || !draft.trim()}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-secondary hover:text-primary border border-border-subtle rounded hover:bg-surface/60 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Plus size={12} />
-          Add
-        </button>
-      </div>
-      {validationError && (
-        <span className="text-[11px] text-danger">{validationError}</span>
-      )}
-
-      {value.length === 0 ? (
-        <span className="text-[11px] text-dim italic">No paths excluded.</span>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {value.map((path) => (
-            <li
-              key={path}
-              className="flex items-center justify-between gap-2 px-2 py-1 bg-surface/50 border border-border-subtle rounded"
-            >
-              <code className="text-xs text-secondary truncate">{path}</code>
-              <button
-                onClick={() => remove(path)}
-                aria-label={`Remove ${path}`}
-                className="p-0.5 text-muted hover:text-danger rounded"
-              >
-                <X size={11} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 /**
- * More permissive sibling of {@link ExcludedDirsEditor}: accepts any absolute
- * Flipper path under `/ext`, `/int`, or `/any`. Used by the Apps section where
- * scan roots and exclusions aren't tied to a single prefix.
+ * Editor for an absolute-Flipper-path list. Accepts any path under `/ext`,
+ * `/int`, or `/any`. Used by the Apps section for the "additional app
+ * directories" list — the per-library *exclusion* lists are handled by
+ * `LibraryExclusionsEditor`, which understands each library's allowed roots.
  */
 function AbsoluteDirListEditor({
   heading,

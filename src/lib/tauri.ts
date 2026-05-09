@@ -488,3 +488,26 @@ export const diagClear = (): Promise<void> =>
 
 export const diagIsEnabled = (): Promise<boolean> =>
   invoke<boolean>("diag_is_enabled");
+
+// ── App icon variants ───────────────────────────────────────────────────
+
+export interface AppIconVariant {
+  /** Stable id persisted in settings.json (e.g. "default", "dark"). */
+  id: string;
+  /** Short human-readable name shown next to the thumbnail. */
+  label: string;
+  /** Base64-encoded PNG bytes for the chooser thumbnail. */
+  png_base64: string;
+}
+
+/** Catalogue of available app-icon variants for the chooser UI. */
+export const appIconVariants = (): Promise<AppIconVariant[]> =>
+  invoke<AppIconVariant[]>("app_icon_variants");
+
+/**
+ * Apply the named app-icon variant to all live windows and (on macOS) the
+ * Dock. Returns the canonical id that was actually applied — the input
+ * verbatim when valid, or `"default"` after a fallback.
+ */
+export const setAppIcon = (variant: string): Promise<string> =>
+  invoke<string>("set_app_icon", { variant });

@@ -36,3 +36,33 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"
 once_cell = "1"
 futures = "0.3"
 uuid = "1"
+
+# macOS-only: AppKit FFI for setting the Dock icon at runtime.
+# `objc2` is already in the dep tree transitively via Tauri/cocoa, so adding
+# `objc2-app-kit` and `objc2-foundation` only adds typed-binding glue, no
+# additional native compilation.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSImage", "NSApplication", "NSWorkspace"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSString", "NSBundle"] }
+
+# One-shot CLI used to generate dark-mode app-icon PNGs from the existing
+# orange icons. Lives in `examples/` so it is *not* picked up by Tauri's
+# bundler — Tauri scans `[[bin]]` targets to decide what to bundle, and a
+# second binary there confuses it. Examples build only on demand.
+#
+# Run after editing the source PNGs or adding new variants:
+#   cargo run --features icon-gen --example gen_app_icons
+[[example]]
+name = "gen_app_icons"
+path = "examples/gen_app_icons.rs"
+required-features = ["icon-gen"]
+
+[features]
+icon-gen = ["dep:image"]
+
+[dependencies.image]
+version = "0.25"
+optional = true
+default-features = false
+features = ["png"]

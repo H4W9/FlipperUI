@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- App-icon chooser in Settings → Appearance: pick between the default orange and a dark variant. Live runtime swap of Tauri window icons (Windows taskbar / Linux title bar) and the macOS Dock via `NSApplication.setApplicationIconImage_`. The chosen variant is also written to the running `.app` bundle as a Finder custom icon (`NSWorkspace.setIcon:forFile:`), so the Dock launcher and Finder show it from launch and after quit — no orange-then-dark flash on macOS. The saved variant is re-applied on every launch, so the bundle icon recovers automatically after app updates that reset bundle metadata.
+- Forward-proof app-icon variant registry on the Rust side (`app_icon.rs`) so adding new icon variants in the future is one entry plus a PNG.
+- Cargo `gen_app_icons` example (gated by the `icon-gen` feature) that recolours warm-orange pixels to near-black to produce the dark icon set across all bundled sizes; rerun after editing source PNGs.
+- Unified "Library Exclusions" Settings section: one editor where each row picks a library (Sub-GHz, Infrared, NFC, RFID, BadUSB, Apps) from a dropdown plus the path to exclude. Replaces the six per-library exclusion editors. Underlying storage shape unchanged — Rust scanners still receive their per-library `excludedDirs` arrays.
 - Recursive folder download from the File Explorer right-click menu, with cumulative byte-based progress across the whole tree and mid-transfer cancellation.
 - Added a GitHub bug-report issue template with required reproduction context and environment fields.
 - Added a GitHub feature-request issue template with workflow, area, and transport-scoped prompts.
@@ -22,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - 1 MiB maximum incoming frame size in the protocol framer to guard against OOM allocations on a corrupt length prefix.
 
 ### Changed
+- Settings reorganised: the six per-library Sub-GHz / Infrared / NFC / RFID / BadUSB / Apps sections (which only held an excluded-directories editor) collapse into the new "Library Exclusions" section. The Apps section now contains only its "Additional app directories" editor.
 - `cli_start`, `cli_send`, `screen_stream_start`, `screen_stream_stop`, and `send_input_event` are now `async` + `spawn_blocking`, so blocking serial I/O no longer freezes the Tauri main thread.
 - README updates now include an unsigned-build disclaimer and a macOS quarantine-removal troubleshooting command.
 - README clone URL example now uses `https://github.com/fuckmaz/FlipperUI.git`.
