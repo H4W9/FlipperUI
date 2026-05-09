@@ -93,7 +93,7 @@ fn recolour(src: &Path, dst: &Path) -> Result<(), String> {
 
     rgba.save(dst)
         .map_err(|e| format!("write {}: {e}", dst.display()))
-    }
+}
 
 /// Heuristic for "this pixel is part of the FlipperUI orange brand fill".
 ///
