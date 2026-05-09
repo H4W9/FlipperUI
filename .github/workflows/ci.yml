@@ -152,6 +152,11 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Read app version
+        id: version
+        shell: bash
+        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Tauri build
         shell: bash
         run: |
@@ -167,7 +172,7 @@ jobs:
         if: matrix.label == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI-Windows
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Windows
           if-no-files-found: error
           path: |
             src-tauri/${{ matrix.bundle_path }}/msi/*.msi
@@ -177,7 +182,7 @@ jobs:
         if: matrix.label == 'macOS-AppleSilicon'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI-macOS-AppleSilicon
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-AppleSilicon
           if-no-files-found: error
           path: |
             src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
@@ -187,7 +192,7 @@ jobs:
         if: matrix.label == 'macOS-Intel'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI-macOS-Intel
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-Intel
           if-no-files-found: error
           path: |
             src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
@@ -197,7 +202,7 @@ jobs:
         if: matrix.label == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperUI-Linux
+          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_Linux
           if-no-files-found: error
           path: |
             src-tauri/${{ matrix.bundle_path }}/deb/*.deb
