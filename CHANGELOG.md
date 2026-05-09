@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Recursive folder download from the File Explorer right-click menu, with cumulative byte-based progress across the whole tree and mid-transfer cancellation.
 - Added a GitHub bug-report issue template with required reproduction context and environment fields.
 - Added a GitHub feature-request issue template with workflow, area, and transport-scoped prompts.
 - Added issue-template config enabling blank issues.
@@ -16,8 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Automatic Flipper clock synchronization after successful USB or BLE connection, with a Settings toggle.
 - BadUSB / BadKB DuckyScript editor backed by CodeMirror, including syntax highlighting, completions, snippets, dirty-state tracking, save/revert controls, and `Cmd/Ctrl+S`.
 - Incremental BadUSB path parsing command so edited scripts can refresh metadata without a full library rescan.
+- Centralized `with_client` helper with sharper transient-vs-fatal transport-error categorization so recoverable `Interrupted` / `WouldBlock` reads no longer tear down the connection.
+- Centralized `validate_path` helper with unit tests covering `/ext`, `/int`, `/any`, lookalike-root rejection, and component-level `..` traversal blocking.
+- 1 MiB maximum incoming frame size in the protocol framer to guard against OOM allocations on a corrupt length prefix.
 
 ### Changed
+- `cli_start`, `cli_send`, `screen_stream_start`, `screen_stream_stop`, and `send_input_event` are now `async` + `spawn_blocking`, so blocking serial I/O no longer freezes the Tauri main thread.
 - README updates now include an unsigned-build disclaimer and a macOS quarantine-removal troubleshooting command.
 - README clone URL example now uses `https://github.com/fuckmaz/FlipperUI.git`.
 - README now includes a maintainer sign-off line and a Stargazers-over-time chart section.
@@ -26,11 +31,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Screen Viewer zoom levels now use cleaner discrete `1x` through `5x` steps.
 - BLE connection dialog now shows scan progress as status text instead of exposing a manual stop-scan button.
 - BadUSB row action and double-click behavior now open the editor instead of a read-only preview.
+- Simplified the leap-year calculation in the device clock-sync path using the standard `is_multiple_of` method.
+- Repo-wide `cargo fmt` pass.
 
 ### Fixed
 - Dashboard battery voltage display now converts millivolts to volts in `BatteryCard` to avoid incorrectly scaled voltage values.
+- Device Info battery voltage now also formats from millivolts to volts.
+- Screen Viewer fullscreen sizing now preserves the Flipper display's 2:1 aspect ratio, growing the app window when possible and scaling down proportionally on short windows instead of squashing the stream vertically.
 - BadUSB edit saves now refresh table metadata such as line count, leading comment, size, and modified time.
 - BadUSB rename, duplicate, and delete actions now operate against the full library list instead of accidentally persisting only the currently filtered rows.
+- Path-validation `/ext` prefix bug — paths like `/extABC` are now correctly rejected (previously a `starts_with("/ext")` slip let lookalike roots through).
+- `send_input_event` no longer holds a mutex across the channel send into the screen-reader thread, removing a contention/interleaving hazard during rapid input bursts.
+- Tauri `listen()` promise race fixed across ~10 frontend sites (App.tsx, all six library views, BleDialog, FileBrowser) — listeners registered after a component unmount now self-cancel instead of leaking.
+- Removed a duplicate BLE reconnect handler in `DevicePanel.tsx` that was racing the canonical handler in `App.tsx`.
 
 ## [0.3.5] — 2026-05-05
 
