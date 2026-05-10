@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{mpsc, Arc, Mutex};
 
 use tokio::sync::oneshot;
@@ -23,8 +23,11 @@ pub struct AppState {
     pub mode: Arc<Mutex<ConnectionMode>>,
     /// Signals the CLI reader thread to stop.
     pub cli_reader_active: Arc<AtomicBool>,
-    /// Signals an in-progress transfer (read/write) to abort.
-    pub transfer_cancelled: Arc<AtomicBool>,
+    /// Monotonic id for the active file transfer. Cancel requests target the
+    /// generation that was active when the user clicked cancel, so a stale
+    /// cancel cannot abort the next transfer.
+    pub transfer_generation: Arc<AtomicU64>,
+    pub transfer_cancelled_generation: Arc<AtomicU64>,
     /// Signals the screen stream reader thread to stop.
     pub screen_stream_active: Arc<AtomicBool>,
     /// Signals an in-progress SubGhz library scan to abort.
@@ -67,7 +70,8 @@ impl AppState {
             client: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(ConnectionMode::Rpc)),
             cli_reader_active: Arc::new(AtomicBool::new(false)),
-            transfer_cancelled: Arc::new(AtomicBool::new(false)),
+            transfer_generation: Arc::new(AtomicU64::new(0)),
+            transfer_cancelled_generation: Arc::new(AtomicU64::new(0)),
             screen_stream_active: Arc::new(AtomicBool::new(false)),
             subghz_scan_cancelled: Arc::new(AtomicBool::new(false)),
             ir_scan_cancelled: Arc::new(AtomicBool::new(false)),

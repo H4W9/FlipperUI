@@ -1,6 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
 use crate::flipper::framing::{read_response, write_message};
@@ -78,7 +75,7 @@ pub fn storage_read<F>(
     client: &mut FlipperClient,
     path: &str,
     on_progress: F,
-    cancelled: &Arc<AtomicBool>,
+    cancelled: impl Fn() -> bool,
 ) -> Result<Vec<u8>>
 where
     F: Fn(usize, usize),
@@ -101,7 +98,7 @@ where
 
     let mut data = Vec::new();
     loop {
-        if cancelled.load(Ordering::Relaxed) {
+        if cancelled() {
             // Drain remaining response frames so the protocol stays in sync
             loop {
                 let drain = read_response(&mut *client.transport)?;
@@ -143,7 +140,7 @@ pub fn storage_write<F>(
     path: &str,
     data: &[u8],
     on_progress: F,
-    cancelled: &Arc<AtomicBool>,
+    cancelled: impl Fn() -> bool,
 ) -> Result<()>
 where
     F: Fn(usize, usize),
@@ -159,7 +156,7 @@ where
     let total = chunks.len();
 
     for (i, chunk) in chunks.iter().enumerate() {
-        if cancelled.load(Ordering::Relaxed) {
+        if cancelled() {
             // Send a final empty chunk to close the write stream cleanly
             let abort_frame = pb::Main {
                 command_id: id,

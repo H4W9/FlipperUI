@@ -105,7 +105,7 @@ export default function App() {
       try {
         if (transport === "ble" && lastBleId) {
           const info = await connectBleDevice(lastBleId, lastBleName ?? undefined);
-          setConnected(info);
+          setConnected(info, "ble");
           setError(null);
           reconnectAttemptsRef.current = 0;
           return;

@@ -66,7 +66,6 @@ pub fn scan_library(
 
     let total = files.len() as u32;
     let mut entries = Vec::with_capacity(files.len());
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
 
     for (idx, (path, size, kind)) in files.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
@@ -86,7 +85,7 @@ pub fn scan_library(
             }
         }
 
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable badusb file");
@@ -109,7 +108,6 @@ pub fn scan_library(
 /// Parse a specific list of BadUSB / BadKB `.txt` paths
 /// Used after editor saves so one row can be refreshed without a full `/ext/badusb` + `/ext/badkb` scan.
 pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<BadUsbEntry>> {
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
     let mut entries = Vec::with_capacity(paths.len());
 
     for path in paths {
@@ -129,7 +127,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<B
 
         let kind = kind_for_path(path);
         let mtime = storage::storage_timestamp(client, path).ok();
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable badusb path");
@@ -172,7 +170,7 @@ fn walk_dir(
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = library_walk::join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name)?;
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, kind, out)?;
         } else if library_walk::has_extension_ci(&f.name, ".txt")

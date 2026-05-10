@@ -61,7 +61,6 @@ pub fn scan_library(
 
     let total = paths.len() as u32;
     let mut entries = Vec::with_capacity(paths.len());
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
 
     for (idx, path) in paths.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
@@ -79,7 +78,7 @@ pub fn scan_library(
             }
         }
 
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable .ir file");
@@ -109,7 +108,7 @@ fn walk_dir(
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = library_walk::join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name)?;
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
         } else if library_walk::has_extension_ci(&f.name, ".ir")

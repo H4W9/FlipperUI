@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use base64::Engine;
@@ -127,10 +127,6 @@ pub async fn apps_read_icon(path: String, state: State<'_, AppState>) -> Result<
 
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    // Use a local (unshared) cancel flag so a user-initiated transfer-cancel
-    // in the File Browser doesn't kill icon prefetches, and vice versa.
-    let cancelled = Arc::new(AtomicBool::new(false));
-
     tauri::async_runtime::spawn_blocking(move || {
         {
             let mode = mode_mutex.lock().unwrap();
@@ -141,7 +137,7 @@ pub async fn apps_read_icon(path: String, state: State<'_, AppState>) -> Result<
         let mut guard = client_mutex.lock().unwrap();
         let client = guard.as_mut().ok_or(FlipperError::NotConnected)?;
 
-        let bytes = storage::storage_read(client, &path, |_, _| {}, &cancelled)?;
+        let bytes = storage::storage_read(client, &path, |_, _| {}, || false)?;
         let icon = fap_icon::extract(&bytes)
             .map(|d| base64::engine::general_purpose::STANDARD.encode(d.icon));
         Ok(icon)

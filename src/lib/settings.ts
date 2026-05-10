@@ -180,6 +180,7 @@ const store = new LazyStore(STORE_FILE, {
 
 let cached: AppSettings | null = null;
 const listeners = new Set<(s: AppSettings) => void>();
+let writeQueue: Promise<AppSettings> = Promise.resolve(DEFAULT_SETTINGS);
 
 export async function loadSettings(): Promise<AppSettings> {
   if (cached) return cached;
@@ -188,7 +189,13 @@ export async function loadSettings(): Promise<AppSettings> {
   return cached;
 }
 
-export async function updateSettings(patch: SettingsPatch): Promise<AppSettings> {
+export function updateSettings(patch: SettingsPatch): Promise<AppSettings> {
+  const nextWrite = writeQueue.then(() => updateSettingsNow(patch));
+  writeQueue = nextWrite.catch(() => cached ?? DEFAULT_SETTINGS);
+  return nextWrite;
+}
+
+async function updateSettingsNow(patch: SettingsPatch): Promise<AppSettings> {
   const current = await loadSettings();
   const next: AppSettings = {
     language: patch.language ?? current.language,

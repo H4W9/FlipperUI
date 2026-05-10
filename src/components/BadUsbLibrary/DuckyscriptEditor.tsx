@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { duckyscriptCompletionSource, duckyscriptLanguage } from "./duckyscript";
@@ -67,6 +67,8 @@ const editorTheme = EditorView.theme({
 export function DuckyscriptEditor({ value, onChange, readOnly = false }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const readOnlyCompartmentRef = useRef(new Compartment());
+  const initialReadOnlyRef = useRef(readOnly);
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
 
@@ -97,7 +99,9 @@ export function DuckyscriptEditor({ value, onChange, readOnly = false }: Props) 
         }),
         keymap.of([indentWithTab, ...completionKeymap, ...historyKeymap, ...defaultKeymap]),
         EditorView.lineWrapping,
-        EditorState.readOnly.of(readOnly),
+        readOnlyCompartmentRef.current.of(
+          EditorState.readOnly.of(initialReadOnlyRef.current),
+        ),
         editorTheme,
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
@@ -116,6 +120,16 @@ export function DuckyscriptEditor({ value, onChange, readOnly = false }: Props) 
       view.destroy();
       viewRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: readOnlyCompartmentRef.current.reconfigure(
+        EditorState.readOnly.of(readOnly),
+      ),
+    });
   }, [readOnly]);
 
   useEffect(() => {

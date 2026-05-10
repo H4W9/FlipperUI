@@ -164,8 +164,10 @@ pub fn apply_app_icon(app: &AppHandle, id: &str) -> Result<&'static str, Flipper
             // Bundle-icon write is best-effort: if the .app is on a
             // read-only volume or the user moved it to /Applications
             // without admin rights, we degrade to runtime-only swap.
-            if let Err(e) = apply_bundle_icon(png, variant_id) {
-                tracing::info!("bundle-icon apply skipped: {e}");
+            if allow_bundle_icon_write() {
+                if let Err(e) = apply_bundle_icon(png, variant_id) {
+                    tracing::info!("bundle-icon apply skipped: {e}");
+                }
             }
         });
         if let Err(e) = dispatch_result {
@@ -174,6 +176,14 @@ pub fn apply_app_icon(app: &AppHandle, id: &str) -> Result<&'static str, Flipper
     }
 
     Ok(canonical)
+}
+
+#[cfg(target_os = "macos")]
+fn allow_bundle_icon_write() -> bool {
+    matches!(
+        std::env::var("FLIPPERUI_ALLOW_BUNDLE_ICON_WRITE").as_deref(),
+        Ok("1" | "true" | "TRUE" | "yes" | "YES")
+    )
 }
 
 #[cfg(target_os = "macos")]

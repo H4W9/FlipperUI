@@ -67,7 +67,6 @@ pub fn scan_library(
 
     let total = paths.len() as u32;
     let mut entries = Vec::with_capacity(paths.len());
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
 
     for (idx, path) in paths.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
@@ -90,7 +89,7 @@ pub fn scan_library(
         // Cache miss (new file, mtime changed, or timestamp failed): do the
         // full read + parse. `storage_read` failures are non-fatal — a locked
         // or missing file is skipped so one bad entry can't break the scan.
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable .sub file");
@@ -120,7 +119,7 @@ fn walk_dir(
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = library_walk::join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name)?;
         // pb_storage::FileType::Dir = 1 in the firmware enum.
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;

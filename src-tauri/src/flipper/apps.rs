@@ -198,7 +198,7 @@ fn walk_dir(
         }
     };
     for f in files {
-        let child = library_walk::join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name)?;
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
         } else if library_walk::has_extension_ci(&f.name, ".fap")

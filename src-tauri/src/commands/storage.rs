@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,7 @@ use crate::commands::client::with_client;
 use crate::commands::path::validate_path;
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::library_walk;
 use crate::flipper::storage;
 use crate::pb_storage;
 use crate::state::AppState;
@@ -19,6 +20,35 @@ fn join_remote(dir: &str, name: &str) -> String {
     } else {
         format!("{dir}/{name}")
     }
+}
+
+fn begin_transfer(generation: &AtomicU64) -> u64 {
+    generation.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+fn transfer_cancelled(cancelled_generation: &AtomicU64, generation: u64) -> bool {
+    cancelled_generation.load(Ordering::Relaxed) == generation
+}
+
+fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
+    let tmp = temp_path_for(path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&tmp, data)?;
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        FlipperError::Io(e)
+    })
+}
+
+fn temp_path_for(path: &Path) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| ".flipperui-download".into());
+    name.push(".part");
+    path.with_file_name(name)
 }
 
 /// Mirror of pb_storage::File for the frontend, with base64-encoded data.
@@ -84,8 +114,8 @@ pub async fn storage_read(
 ) -> Result<String> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    let cancelled = Arc::clone(&state.transfer_cancelled);
-    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+    let generation = begin_transfer(&state.transfer_generation);
+    let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
@@ -100,7 +130,7 @@ pub async fn storage_read(
                         .unwrap_or(0);
                     let _ = app.emit("download-progress", pct);
                 },
-                &cancelled,
+                || transfer_cancelled(&cancelled_generation, generation),
             )?;
             Ok(base64::Engine::encode(
                 &base64::engine::general_purpose::STANDARD,
@@ -123,8 +153,8 @@ pub async fn storage_write(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    let cancelled = Arc::clone(&state.transfer_cancelled);
-    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+    let generation = begin_transfer(&state.transfer_generation);
+    let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
@@ -140,7 +170,7 @@ pub async fn storage_write(
                     let pct = (sent * 100 / total) as u32;
                     let _ = app.emit("upload-progress", pct);
                 },
-                &cancelled,
+                || transfer_cancelled(&cancelled_generation, generation),
             )
         })
     })
@@ -159,8 +189,8 @@ pub async fn storage_read_to_local(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    let cancelled = Arc::clone(&state.transfer_cancelled);
-    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+    let generation = begin_transfer(&state.transfer_generation);
+    let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
@@ -175,10 +205,10 @@ pub async fn storage_read_to_local(
                         .unwrap_or(0);
                     let _ = app.emit("download-progress", pct);
                 },
-                &cancelled,
+                || transfer_cancelled(&cancelled_generation, generation),
             )
         })?;
-        std::fs::write(local_path, data)?;
+        write_atomic(&PathBuf::from(local_path), &data)?;
         Ok(())
     })
     .await
@@ -196,8 +226,8 @@ pub async fn storage_write_from_local(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    let cancelled = Arc::clone(&state.transfer_cancelled);
-    cancelled.store(false, std::sync::atomic::Ordering::Relaxed);
+    let generation = begin_transfer(&state.transfer_generation);
+    let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
@@ -211,7 +241,7 @@ pub async fn storage_write_from_local(
                     let pct = (sent * 100 / total) as u32;
                     let _ = app.emit("upload-progress", pct);
                 },
-                &cancelled,
+                || transfer_cancelled(&cancelled_generation, generation),
             )
         })
     })
@@ -333,12 +363,13 @@ pub async fn storage_timestamp(path: String, state: State<'_, AppState>) -> Resu
 }
 
 /// Cancel an in-progress transfer (read or write).
-/// Sets the `transfer_cancelled` flag; the next loop iteration of storage_read/write checks it.
+/// Marks the active transfer generation as cancelled.
 #[tauri::command]
 pub fn cancel_transfer(state: State<AppState>) -> Result<()> {
+    let generation = state.transfer_generation.load(Ordering::Relaxed);
     state
-        .transfer_cancelled
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+        .transfer_cancelled_generation
+        .store(generation, Ordering::Relaxed);
     Ok(())
 }
 
@@ -350,6 +381,7 @@ fn sum_tree_bytes(client: &mut FlipperClient, path: &str) -> Result<u64> {
     while let Some(dir) = queue.pop() {
         let entries = storage::storage_list(client, &dir)?;
         for e in entries {
+            library_walk::validate_child_name(&e.name)?;
             let sub = join_remote(&dir, &e.name);
             if e.r#type == 1 {
                 queue.push(sub);
@@ -372,17 +404,18 @@ fn download_dir_recursive(
     total_bytes: u64,
     bytes_done: &mut u64,
     on_progress: &dyn Fn(u64, u64),
-    cancelled: &Arc<AtomicBool>,
+    cancelled: &dyn Fn() -> bool,
 ) -> Result<()> {
-    if cancelled.load(Ordering::Relaxed) {
+    if cancelled() {
         return Err(FlipperError::TransferCancelled);
     }
     std::fs::create_dir_all(local_dir)?;
     let entries = storage::storage_list(client, remote_dir)?;
     for e in entries {
-        if cancelled.load(Ordering::Relaxed) {
+        if cancelled() {
             return Err(FlipperError::TransferCancelled);
         }
+        library_walk::validate_child_name(&e.name)?;
         let remote_sub = join_remote(remote_dir, &e.name);
         let local_sub = local_dir.join(&e.name);
         if e.r#type == 1 {
@@ -407,7 +440,7 @@ fn download_dir_recursive(
                 },
                 cancelled,
             )?;
-            std::fs::write(&local_sub, &data)?;
+            write_atomic(&local_sub, &data)?;
             *bytes_done = bytes_done.saturating_add(file_size);
             on_progress(*bytes_done, total_bytes);
         }
@@ -434,8 +467,8 @@ pub async fn storage_read_dir_to_local(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
-    let cancelled = Arc::clone(&state.transfer_cancelled);
-    cancelled.store(false, Ordering::Relaxed);
+    let generation = begin_transfer(&state.transfer_generation);
+    let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
@@ -456,6 +489,7 @@ pub async fn storage_read_dir_to_local(
                 let _ = app.emit("download-progress", pct);
             };
 
+            let is_cancelled = || transfer_cancelled(&cancelled_generation, generation);
             download_dir_recursive(
                 c,
                 &path,
@@ -463,7 +497,7 @@ pub async fn storage_read_dir_to_local(
                 total_bytes,
                 &mut bytes_done,
                 &on_progress,
-                &cancelled,
+                &is_cancelled,
             )?;
 
             // Empty folders: ensure final 100% lands so the UI clears cleanly.

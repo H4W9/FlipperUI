@@ -68,7 +68,6 @@ pub fn scan_library(
 
     let total = files.len() as u32;
     let mut entries = Vec::with_capacity(files.len());
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
 
     for (idx, (path, size)) in files.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
@@ -87,7 +86,7 @@ pub fn scan_library(
             }
         }
 
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable .nfc file");
@@ -113,7 +112,6 @@ pub fn scan_library(
 /// into the library view without re-walking `/ext/nfc`. Non-`.nfc` and
 /// unreadable paths are skipped silently — the same behaviour as a full scan.
 pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<NfcEntry>> {
-    let dummy_cancel = Arc::new(AtomicBool::new(false));
     let mut entries = Vec::with_capacity(paths.len());
 
     for path in paths {
@@ -132,7 +130,7 @@ pub fn parse_paths(client: &mut FlipperClient, paths: &[String]) -> Result<Vec<N
         }
 
         let mtime = storage::storage_timestamp(client, path).ok();
-        let bytes = match storage::storage_read(client, path, |_, _| {}, &dummy_cancel) {
+        let bytes = match storage::storage_read(client, path, |_, _| {}, || false) {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!(?e, %path, "skipping unreadable .nfc path");
@@ -162,7 +160,7 @@ fn walk_dir(
     }
     let files = storage::storage_list(client, dir)?;
     for f in files {
-        let child = library_walk::join_path(dir, &f.name);
+        let child = library_walk::join_path(dir, &f.name)?;
         if f.r#type == 1 {
             walk_dir(client, &child, excluded, out)?;
         } else if library_walk::has_extension_ci(&f.name, ".nfc")

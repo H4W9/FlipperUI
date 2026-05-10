@@ -160,11 +160,27 @@ jobs:
       - name: Tauri build
         shell: bash
         run: |
-          if [ -n "${{ matrix.target }}" ]; then
+          if [[ "${{ matrix.label }}" == macOS-* ]]; then
+            npm run tauri build -- --ci --target ${{ matrix.target }} --bundles app
+          elif [ -n "${{ matrix.target }}" ]; then
             npm run tauri build -- --ci --target ${{ matrix.target }}
           else
             npm run tauri build -- --ci
           fi
+
+      - name: Verify macOS app architecture
+        if: startsWith(matrix.label, 'macOS-')
+        shell: bash
+        run: |
+          app_binary="src-tauri/${{ matrix.bundle_path }}/macos/FlipperUI.app/Contents/MacOS/FlipperUI"
+          expected_arch="${{ matrix.target }}"
+          if [ "$expected_arch" = "x86_64-apple-darwin" ]; then
+            expected_arch="x86_64"
+          else
+            expected_arch="arm64"
+          fi
+          file "$app_binary"
+          lipo -archs "$app_binary" | grep -q "$expected_arch"
 
       # Upload each bundle format as its own artifact so they are
       # individually downloadable from the Actions UI.
@@ -187,14 +203,6 @@ jobs:
           path: src-tauri/${{ matrix.bundle_path }}/nsis/*.exe
 
       # --- macOS Apple Silicon ---
-      - name: Upload DMG (macOS Apple Silicon)
-        if: matrix.label == 'macOS-AppleSilicon'
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-AppleSilicon_dmg
-          if-no-files-found: error
-          path: src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
-
       - name: Upload App (macOS Apple Silicon)
         if: matrix.label == 'macOS-AppleSilicon'
         uses: actions/upload-artifact@v4
@@ -204,14 +212,6 @@ jobs:
           path: src-tauri/${{ matrix.bundle_path }}/macos/*.app
 
       # --- macOS Intel ---
-      - name: Upload DMG (macOS Intel)
-        if: matrix.label == 'macOS-Intel'
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlipperUI_v${{ steps.version.outputs.APP_VERSION }}_macOS-Intel_dmg
-          if-no-files-found: error
-          path: src-tauri/${{ matrix.bundle_path }}/dmg/*.dmg
-
       - name: Upload App (macOS Intel)
         if: matrix.label == 'macOS-Intel'
         uses: actions/upload-artifact@v4

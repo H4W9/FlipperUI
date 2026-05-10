@@ -5,6 +5,8 @@
 //! the path-rebuild or exclusion semantics lands in one place — and adding the
 //! next library doesn't grow the duplication count.
 
+use crate::error::{FlipperError, Result};
+
 /// Progress callback fired after each parsed file. `scanned` ≤ `total`.
 /// Re-exported under the same alias each scanner already used so call sites
 /// don't need to change.
@@ -26,12 +28,32 @@ pub fn has_extension_ci(name: &str, ext_with_dot: &str) -> bool {
         && name[name.len() - ext_with_dot.len()..].eq_ignore_ascii_case(ext_with_dot)
 }
 
+/// Validate a child name returned by StorageList before rebuilding a path.
+///
+/// The device should return plain names, not paths. Rejecting separators and
+/// dot segments keeps a malformed response from escaping the scanned root or
+/// writing outside the selected local download directory.
+pub fn validate_child_name(child: &str) -> Result<()> {
+    if child.is_empty()
+        || child == "."
+        || child == ".."
+        || child.contains('/')
+        || child.contains('\\')
+    {
+        return Err(FlipperError::Session(format!(
+            "Invalid child path returned by device: {child}"
+        )));
+    }
+    Ok(())
+}
+
 /// Concatenate `parent` and `child` with exactly one `/` between them.
-pub fn join_path(parent: &str, child: &str) -> String {
+pub fn join_path(parent: &str, child: &str) -> Result<String> {
+    validate_child_name(child)?;
     if parent.ends_with('/') {
-        format!("{parent}{child}")
+        Ok(format!("{parent}{child}"))
     } else {
-        format!("{parent}/{child}")
+        Ok(format!("{parent}/{child}"))
     }
 }
 
@@ -65,8 +87,16 @@ mod tests {
 
     #[test]
     fn join_path_handles_trailing_slash() {
-        assert_eq!(join_path("/ext/nfc", "x.nfc"), "/ext/nfc/x.nfc");
-        assert_eq!(join_path("/ext/nfc/", "x.nfc"), "/ext/nfc/x.nfc");
+        assert_eq!(join_path("/ext/nfc", "x.nfc").unwrap(), "/ext/nfc/x.nfc");
+        assert_eq!(join_path("/ext/nfc/", "x.nfc").unwrap(), "/ext/nfc/x.nfc");
+    }
+
+    #[test]
+    fn child_name_rejects_path_segments() {
+        for name in ["", ".", "..", "../x", "a/b", "a\\b"] {
+            assert!(validate_child_name(name).is_err(), "should reject {name:?}");
+        }
+        assert!(validate_child_name("foo..bar").is_ok());
     }
 
     #[test]

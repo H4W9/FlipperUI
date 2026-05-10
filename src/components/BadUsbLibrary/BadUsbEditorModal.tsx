@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, RotateCcw, Save, X } from "lucide-react";
 import { badusbParsePaths, storageRead, storageWrite } from "../../lib/tauri";
 import { base64ToUint8Array, uint8ArrayToBase64 } from "../../lib/encoding";
@@ -52,24 +52,12 @@ export function BadUsbEditorModal({ entry, onClose, onSaved }: Props) {
     };
   }, [entry.path]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        if (dirty && !saving && !loading) void saveChanges();
-      }
-      if (e.key === "Escape") requestClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (dirty && !window.confirm("Discard unsaved changes?")) return;
     onClose();
-  };
+  }, [dirty, onClose]);
 
-  const saveChanges = async () => {
+  const saveChanges = useCallback(async () => {
     if (!dirty || saving || loading) return;
     setSaving(true);
     setError(null);
@@ -91,7 +79,19 @@ export function BadUsbEditorModal({ entry, onClose, onSaved }: Props) {
     } finally {
       setSaving(false);
     }
-  };
+  }, [dirty, entry, loading, onSaved, saving, text]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (dirty && !saving && !loading) void saveChanges();
+      }
+      if (e.key === "Escape") requestClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dirty, loading, requestClose, saveChanges, saving]);
 
   const revert = () => {
     if (initialText !== null) setText(initialText);

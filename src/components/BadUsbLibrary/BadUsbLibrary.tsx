@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AlertTriangle, Usb } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
@@ -8,11 +8,14 @@ import { loadBadUsbCache, saveBadUsbCache } from "../../lib/badusbCache";
 import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { LibraryTable } from "./LibraryTable";
-import { BadUsbEditorModal } from "./BadUsbEditorModal";
+import { Spinner } from "../ui/Spinner";
 import type { BadUsbEntry, BadUsbScanProgress } from "../../types/badusb";
 
 const USB_ROOT = "/ext/badusb";
 const KB_ROOT = "/ext/badkb";
+const BadUsbEditorModal = lazy(() =>
+  import("./BadUsbEditorModal").then((m) => ({ default: m.BadUsbEditorModal })),
+);
 
 export function BadUsbLibrary() {
   const isConnected = useFlipperStore((s) => s.isConnected);
@@ -177,12 +180,22 @@ export function BadUsbLibrary() {
       )}
 
       {previewEntry && (
-        <BadUsbEditorModal
-          entry={previewEntry}
-          onClose={() => setPreviewEntry(null)}
-          onSaved={onEditorSaved}
-        />
+        <Suspense fallback={<EditorLoadingOverlay />}>
+          <BadUsbEditorModal
+            entry={previewEntry}
+            onClose={() => setPreviewEntry(null)}
+            onSaved={onEditorSaved}
+          />
+        </Suspense>
       )}
+    </div>
+  );
+}
+
+function EditorLoadingOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-app/70 backdrop-blur-sm">
+      <Spinner size={20} />
     </div>
   );
 }
