@@ -44,8 +44,10 @@ uuid = "1"
 # Windows-only: Win32 API for setting the taskbar icon at runtime.
 # Tauri's `set_icon` only updates the title-bar icon; the taskbar needs
 # an explicit `WM_SETICON` with `ICON_BIG` via `SendMessageW`.
+# Uses the same `windows` crate / version that Tauri already depends on
+# so the HWND type from `window.hwnd()` matches our `SendMessageW` call.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
     "Win32_Foundation",

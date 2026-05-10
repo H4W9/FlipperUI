@@ -232,13 +232,13 @@ fn apply_dock_icon(_png: &[u8]) -> Result<(), FlipperError> {
 /// leaving the taskbar showing the executable's embedded icon.
 #[cfg(target_os = "windows")]
 fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
-    use windows_sys::Win32::Foundation::TRUE;
-    use windows_sys::Win32::Graphics::Gdi::{
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::Graphics::Gdi::{
         CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO,
         BITMAPINFOHEADER, DIB_RGB_COLORS, RGBQUAD,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateIconIndirect, SendMessageW, ICONINFO, ICON_BIG, WM_SETICON,
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateIconIndirect, ICONINFO, ICON_BIG, SendMessageW, WM_SETICON,
     };
 
     let image = Image::from_bytes(png)
@@ -255,65 +255,55 @@ fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
     }
 
     unsafe {
-        let hdc = GetDC(0);
+        let hdc = GetDC(None);
 
-        let bmi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: width,
-                biHeight: -height, // negative = top-down DIB
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: 0, // BI_RGB
-                biSizeImage: 0,
-                biXPelsPerMeter: 0,
-                biYPelsPerMeter: 0,
-                biClrUsed: 0,
-                biClrImportant: 0,
-            },
-            bmiColors: [RGBQUAD {
-                rgbBlue: 0,
-                rgbGreen: 0,
-                rgbRed: 0,
-                rgbReserved: 0,
-            }],
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width,
+            biHeight: -height, // negative = top-down DIB
+            biPlanes: 1,
+            biBitCount: 32,
+            ..Default::default()
         };
+        bmi.bmiColors = [RGBQUAD::default()];
 
         let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let color_bmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, 0, 0);
-        if color_bmp == 0 || bits.is_null() {
-            ReleaseDC(0, hdc);
-            return Err(FlipperError::Internal("CreateDIBSection failed".into()));
-        }
+        let color_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
+            .map_err(|e| {
+                ReleaseDC(None, hdc);
+                FlipperError::Internal(format!("CreateDIBSection: {e}"))
+            })?;
         std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits as *mut u8, bgra.len());
 
-        let mask_bmp = CreateBitmap(width, height, 1, 1, std::ptr::null());
+        let mask_bmp = CreateBitmap(width, height, 1, 1, None);
 
         let icon_info = ICONINFO {
-            fIcon: TRUE,
+            fIcon: true.into(),
             xHotspot: 0,
             yHotspot: 0,
             hbmMask: mask_bmp,
             hbmColor: color_bmp,
         };
 
-        let hicon = CreateIconIndirect(&icon_info);
+        let hicon = CreateIconIndirect(&icon_info).map_err(|e| {
+            let _ = DeleteObject(color_bmp.into());
+            let _ = DeleteObject(mask_bmp.into());
+            ReleaseDC(None, hdc);
+            FlipperError::Internal(format!("CreateIconIndirect: {e}"))
+        })?;
 
-        DeleteObject(color_bmp);
-        DeleteObject(mask_bmp);
-        ReleaseDC(0, hdc);
-
-        if hicon == 0 {
-            return Err(FlipperError::Internal("CreateIconIndirect failed".into()));
-        }
+        let _ = DeleteObject(color_bmp.into());
+        let _ = DeleteObject(mask_bmp.into());
+        ReleaseDC(None, hdc);
 
         for window in app.webview_windows().values() {
-            if let Ok(hwnd_val) = window.hwnd() {
+            if let Ok(hwnd) = window.hwnd() {
                 SendMessageW(
-                    hwnd_val.0 as isize,
+                    hwnd,
                     WM_SETICON,
-                    ICON_BIG as usize,
-                    hicon as isize,
+                    Some(WPARAM(ICON_BIG as usize)),
+                    Some(LPARAM(hicon.0 as isize)),
                 );
             }
         }
