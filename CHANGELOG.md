@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Cargo `gen_app_icons` example (gated by the `icon-gen` feature) that recolours warm-orange pixels to near-black to produce the dark icon set across all bundled sizes; rerun after editing source PNGs.
 - Unified "Library Exclusions" Settings section: one editor where each row picks a library (Sub-GHz, Infrared, NFC, RFID, BadUSB, Apps) from a dropdown plus the path to exclude. Replaces the six per-library exclusion editors. Underlying storage shape unchanged — Rust scanners still receive their per-library `excludedDirs` arrays.
 - Recursive folder download from the File Explorer right-click menu, with cumulative byte-based progress across the whole tree and mid-transfer cancellation.
+- File Browser Settings section: per-action toggles (Rename, Download, Delete) to choose which inline hover icons appear on file rows. All actions remain available via right-click context menu regardless of the setting.
 - Added a GitHub bug-report issue template with required reproduction context and environment fields.
 - Added a GitHub feature-request issue template with workflow, area, and transport-scoped prompts.
 - Added issue-template config enabling blank issues.

@@ -17,6 +17,7 @@ import {
   MonitorPlay,
   Palette,
   Filter,
+  FolderCog,
 } from "lucide-react";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
@@ -98,6 +99,21 @@ export function SettingsPane() {
 
   const onSyncClockOnConnectChange = async (syncClockOnConnect: boolean) => {
     const next = await updateSettings({ connection: { syncClockOnConnect } });
+    setSettings(next);
+  };
+
+  const onInlineActionChange = async (
+    action: "rename" | "download" | "delete",
+    enabled: boolean,
+  ) => {
+    const current = settings?.fileBrowser.inlineActions ?? {
+      rename: true,
+      download: true,
+      delete: true,
+    };
+    const next = await updateSettings({
+      fileBrowser: { inlineActions: { ...current, [action]: enabled } },
+    });
     setSettings(next);
   };
 
@@ -270,6 +286,39 @@ export function SettingsPane() {
               disabled={!settings}
               onChange={onSyncClockOnConnectChange}
               ariaLabel="Sync clock on connect"
+            />
+          </Row>
+        </Section>
+
+        <Section icon={<FolderCog size={13} />} title="File Browser">
+          <Row
+            label="Inline action icons"
+            hint="Choose which action icons appear on hover for each file row. All actions are always available via right-click."
+          >
+            <span />
+          </Row>
+          <Row label="Rename">
+            <Toggle
+              checked={settings?.fileBrowser.inlineActions.rename ?? true}
+              disabled={!settings}
+              onChange={(v) => onInlineActionChange("rename", v)}
+              ariaLabel="Show rename icon inline"
+            />
+          </Row>
+          <Row label="Download">
+            <Toggle
+              checked={settings?.fileBrowser.inlineActions.download ?? true}
+              disabled={!settings}
+              onChange={(v) => onInlineActionChange("download", v)}
+              ariaLabel="Show download icon inline"
+            />
+          </Row>
+          <Row label="Delete">
+            <Toggle
+              checked={settings?.fileBrowser.inlineActions.delete ?? true}
+              disabled={!settings}
+              onChange={(v) => onInlineActionChange("delete", v)}
+              ariaLabel="Show delete icon inline"
             />
           </Row>
         </Section>

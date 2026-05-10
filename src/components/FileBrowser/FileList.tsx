@@ -22,6 +22,7 @@ import { useFlipperStore } from "../../store/useFlipperStore";
 import { useStorage } from "../../hooks/useStorage";
 import { useExportDrag } from "../../hooks/useExportDrag";
 import { storageTarExtract, storageTimestamp } from "../../lib/tauri";
+import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { joinPath } from "../../lib/encoding";
 import { Spinner } from "../ui/Spinner";
 import type { FileEntry } from "../../types/flipper";
@@ -181,11 +182,19 @@ function ContextMenu({
 
 // ── File row ─────────────────────────────────────────────────────────────────
 
+interface InlineActions {
+  rename: boolean;
+  download: boolean;
+  delete: boolean;
+}
+
 interface FileRowProps {
   entry: FileEntry;
   isRenaming: boolean;
   isSelected: boolean;
+  inlineActions: InlineActions;
   onStartRename: (name: string) => void;
+  onDelete: (name: string, isDir: boolean) => void;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
   onSelect: (name: string, e: React.MouseEvent) => void;
   style?: React.CSSProperties;
@@ -210,7 +219,9 @@ function FileRow({
   entry,
   isRenaming,
   isSelected,
+  inlineActions,
   onStartRename,
+  onDelete,
   onContextMenu,
   onSelect,
   style,
@@ -343,25 +354,36 @@ function FileRow({
         </span>
       )}
 
-      {!isRenaming && (
+      {!isRenaming && (inlineActions.rename || inlineActions.download || inlineActions.delete) && (
         <div
           className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => onStartRename(entry.name)}
-            className="p-1 text-secondary hover:text-accent rounded"
-            title="Rename (F2)"
-          >
-            <Pencil size={13} />
-          </button>
-          {!isDir && (
+          {inlineActions.rename && (
+            <button
+              onClick={() => onStartRename(entry.name)}
+              className="p-1 text-secondary hover:text-accent rounded"
+              title="Rename (F2)"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          {inlineActions.download && !isDir && (
             <button
               onClick={() => download(entry.name)}
               className="p-1 text-secondary hover:text-blue-400 rounded"
               title="Download"
             >
               <Download size={13} />
+            </button>
+          )}
+          {inlineActions.delete && (
+            <button
+              onClick={() => onDelete(entry.name, isDir)}
+              className="p-1 text-secondary hover:text-danger rounded"
+              title="Delete"
+            >
+              <Trash2 size={13} />
             </button>
           )}
         </div>
@@ -417,7 +439,13 @@ export function FileList() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
+  const [inlineActions, setInlineActions] = useState<InlineActions>({ rename: true, download: true, delete: true });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadSettings().then((s) => setInlineActions(s.fileBrowser.inlineActions));
+    return subscribeSettings((s) => setInlineActions(s.fileBrowser.inlineActions));
+  }, []);
 
   // Clear filter + selection + timestamp cache when directory changes
   useEffect(() => {
@@ -618,7 +646,9 @@ export function FileList() {
                     entry={entry}
                     isRenaming={renamingName === entry.name}
                     isSelected={selectedNames.has(entry.name)}
+                    inlineActions={inlineActions}
                     onStartRename={setRenamingName}
+                    onDelete={(name, isDir) => remove(name, isDir)}
                     onContextMenu={handleContextMenu}
                     onSelect={handleSelect}
                     style={{

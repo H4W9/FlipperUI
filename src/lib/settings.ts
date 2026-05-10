@@ -82,6 +82,14 @@ export interface AppSettings {
      * every successful USB or BLE connection. */
     syncClockOnConnect: boolean;
   };
+  fileBrowser: {
+    /** Which action icons appear inline on hover for each file row. */
+    inlineActions: {
+      rename: boolean;
+      download: boolean;
+      delete: boolean;
+    };
+  };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -103,6 +111,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     lastBleName: null,
     autoReconnect: false,
     syncClockOnConnect: true,
+  },
+  fileBrowser: {
+    inlineActions: { rename: true, download: true, delete: true },
   },
 };
 
@@ -149,6 +160,13 @@ export type SettingsPatch = {
     lastBleName?: string | null;
     autoReconnect?: boolean;
     syncClockOnConnect?: boolean;
+  };
+  fileBrowser?: {
+    inlineActions?: {
+      rename?: boolean;
+      download?: boolean;
+      delete?: boolean;
+    };
   };
 };
 
@@ -236,6 +254,19 @@ export async function updateSettings(patch: SettingsPatch): Promise<AppSettings>
         patch.connection?.syncClockOnConnect ??
         current.connection.syncClockOnConnect,
     },
+    fileBrowser: {
+      inlineActions: {
+        rename:
+          patch.fileBrowser?.inlineActions?.rename ??
+          current.fileBrowser.inlineActions.rename,
+        download:
+          patch.fileBrowser?.inlineActions?.download ??
+          current.fileBrowser.inlineActions.download,
+        delete:
+          patch.fileBrowser?.inlineActions?.delete ??
+          current.fileBrowser.inlineActions.delete,
+      },
+    },
   };
   await store.set(STORE_KEY, next);
   cached = next;
@@ -315,6 +346,19 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
       syncClockOnConnect:
         raw.connection?.syncClockOnConnect ??
         DEFAULT_SETTINGS.connection.syncClockOnConnect,
+    },
+    fileBrowser: {
+      inlineActions: {
+        rename:
+          raw.fileBrowser?.inlineActions?.rename ??
+          DEFAULT_SETTINGS.fileBrowser.inlineActions.rename,
+        download:
+          raw.fileBrowser?.inlineActions?.download ??
+          DEFAULT_SETTINGS.fileBrowser.inlineActions.download,
+        delete:
+          raw.fileBrowser?.inlineActions?.delete ??
+          DEFAULT_SETTINGS.fileBrowser.inlineActions.delete,
+      },
     },
   };
 }

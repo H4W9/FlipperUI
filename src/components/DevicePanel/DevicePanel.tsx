@@ -328,9 +328,6 @@ export function DevicePanel() {
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 bg-panel border-b border-flipper shrink-0">
-      {/* Icon */}
-      <Usb size={18} className="text-accent shrink-0" />
-
       {/* Title */}
       <span className="font-semibold text-sm text-white">
         Flipper<span className="text-accent">UI</span>
