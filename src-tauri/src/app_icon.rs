@@ -136,6 +136,16 @@ pub fn apply_app_icon(app: &AppHandle, id: &str) -> Result<&'static str, Flipper
         }
     }
 
+    // Windows taskbar icon — Tauri's `set_icon` above handles the title-bar
+    // icon (ICON_SMALL) but does not reliably update the taskbar (ICON_BIG).
+    // We create an HICON from the PNG pixels and send WM_SETICON explicitly.
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = apply_taskbar_icon(app, png) {
+            tracing::warn!("taskbar-icon apply failed: {e}");
+        }
+    }
+
     // macOS Dock icon must be set on the AppKit main thread.
     // - Setup hook: already on main → `run_on_main_thread` posts onto the
     //   event loop and runs before the window becomes visible.
@@ -213,6 +223,106 @@ fn apply_dock_icon(png: &[u8]) -> Result<(), FlipperError> {
 #[allow(dead_code)]
 fn apply_dock_icon(_png: &[u8]) -> Result<(), FlipperError> {
     Ok(())
+}
+
+/// Create an HICON from RGBA pixel data and send `WM_SETICON` with
+/// `ICON_BIG` to every Tauri window, which updates the taskbar icon.
+///
+/// Tauri's `window.set_icon` only sets `ICON_SMALL` reliably on Windows,
+/// leaving the taskbar showing the executable's embedded icon.
+#[cfg(target_os = "windows")]
+fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
+    use windows_sys::Win32::Foundation::TRUE;
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO,
+        BITMAPINFOHEADER, DIB_RGB_COLORS, RGBQUAD,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateIconIndirect, ICONINFO, ICON_BIG, SendMessageW, WM_SETICON,
+    };
+
+    let image = Image::from_bytes(png)
+        .map_err(|e| FlipperError::Internal(format!("decode app-icon PNG: {e}")))?;
+
+    let width = image.width() as i32;
+    let height = image.height() as i32;
+    let rgba = image.rgba();
+
+    // Windows DIBs expect BGRA pixel order.
+    let mut bgra = rgba.to_vec();
+    for pixel in bgra.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+    }
+
+    unsafe {
+        let hdc = GetDC(0);
+
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height, // negative = top-down DIB
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: 0, // BI_RGB
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [RGBQUAD {
+                rgbBlue: 0,
+                rgbGreen: 0,
+                rgbRed: 0,
+                rgbReserved: 0,
+            }],
+        };
+
+        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let color_bmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, 0, 0);
+        if color_bmp == 0 || bits.is_null() {
+            ReleaseDC(0, hdc);
+            return Err(FlipperError::Internal("CreateDIBSection failed".into()));
+        }
+        std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits as *mut u8, bgra.len());
+
+        let mask_bmp = CreateBitmap(width, height, 1, 1, std::ptr::null());
+
+        let icon_info = ICONINFO {
+            fIcon: TRUE,
+            xHotspot: 0,
+            yHotspot: 0,
+            hbmMask: mask_bmp,
+            hbmColor: color_bmp,
+        };
+
+        let hicon = CreateIconIndirect(&icon_info);
+
+        DeleteObject(color_bmp);
+        DeleteObject(mask_bmp);
+        ReleaseDC(0, hdc);
+
+        if hicon == 0 {
+            return Err(FlipperError::Internal("CreateIconIndirect failed".into()));
+        }
+
+        for window in app.webview_windows().values() {
+            if let Ok(hwnd_val) = window.hwnd() {
+                SendMessageW(
+                    hwnd_val.0 as isize,
+                    WM_SETICON,
+                    ICON_BIG as usize,
+                    hicon as isize,
+                );
+            }
+        }
+
+        // Intentionally leak the HICON — the OS references the handle for
+        // the taskbar tile, and icon changes are rare user actions.
+
+        Ok(())
+    }
 }
 
 /// Write a Finder custom icon onto the running `.app` bundle so the Dock
