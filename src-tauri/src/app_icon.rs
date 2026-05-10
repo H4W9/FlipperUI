@@ -257,16 +257,17 @@ fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
     unsafe {
         let hdc = GetDC(None);
 
-        let mut bmi = BITMAPINFO::default();
-        bmi.bmiHeader = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width,
-            biHeight: -height, // negative = top-down DIB
-            biPlanes: 1,
-            biBitCount: 32,
-            ..Default::default()
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height, // negative = top-down DIB
+                biPlanes: 1,
+                biBitCount: 32,
+                ..Default::default()
+            },
+            bmiColors: [RGBQUAD::default(); 1],
         };
-        bmi.bmiColors = [RGBQUAD::default()];
 
         let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
         let color_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
