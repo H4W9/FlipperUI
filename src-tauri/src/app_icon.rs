@@ -238,7 +238,7 @@ fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
         BITMAPINFOHEADER, DIB_RGB_COLORS, RGBQUAD,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateIconIndirect, ICONINFO, ICON_BIG, SendMessageW, WM_SETICON,
+        CreateIconIndirect, SendMessageW, ICONINFO, ICON_BIG, WM_SETICON,
     };
 
     let image = Image::from_bytes(png)
