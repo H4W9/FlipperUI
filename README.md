@@ -24,7 +24,7 @@ FlipperUI is built for people who use their Flipper Zero often and want a deskto
 > FlipperUI is pre-release software. The app is actively evolving and is currently tested most heavily on macOS.
 
 <p align="center">
-  <img src="public/FlipperUI_v0.3.5_Dashboard.png" alt="FlipperUI v0.3.5 dashboard" width="900">
+  <img src="public/FlipperUI_v0.4.0_Dashboard.png" alt="FlipperUI v0.4.0 dashboard" width="900">
 </p>
 
 ## Highlights
