@@ -176,7 +176,7 @@ const TRAY_MONOCHROME_PNG: &[u8] = include_bytes!("../icons/tray-monochrome.png"
 /// `tray_icon_for` so commands::tray can re-skin a running tray without
 /// rebuilding it.
 pub fn tray_icon_for(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     monochrome: bool,
 ) -> tauri::Result<tauri::image::Image<'static>> {
     if monochrome {
@@ -186,10 +186,8 @@ pub fn tray_icon_for(
         // square transparent canvas double the source's max dimension.
         return Ok(pad_to_square(&raw, 1));
     }
-    app.default_window_icon()
-        .cloned()
-        .map(tauri::image::Image::to_owned)
-        .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))
+    tauri::image::Image::from_bytes(app_icon::current_variant_png())
+        .map_err(|e| tauri::Error::AssetNotFound(format!("app-icon variant PNG: {e}")))
 }
 
 /// Centre `src` inside a square transparent RGBA canvas whose side equals
@@ -384,16 +382,14 @@ pub fn run() {
             // (or the context menu gesture) opens the Show/Hide/Quit menu.
             // The frontend can remove and re-install the tray at runtime via
             // `set_tray_enabled`, so the build logic lives in a shared helper.
-            install_tray(app.handle(), commands::tray::tray_monochrome())?;
-
-            // App-icon variant — read the saved choice from settings.json
-            // (written by the frontend) and apply it before the main window
-            // becomes visible. On macOS this means the Dock shows the chosen
-            // icon from launch with no orange-then-dark flash.
+            // App-icon variant — applied before the tray so install_tray
+            // picks up the correct variant icon from the start.
             let variant = app_icon::load_saved_variant(app.handle());
             if let Err(e) = app_icon::apply_app_icon(app.handle(), variant) {
                 tracing::warn!("app-icon: initial apply failed: {e}");
             }
+
+            install_tray(app.handle(), commands::tray::tray_monochrome())?;
 
             Ok(())
         })

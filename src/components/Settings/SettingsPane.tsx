@@ -18,7 +18,11 @@ import {
   Palette,
   Filter,
   FolderCog,
+  Bug,
+  MessageSquare,
+  Mail,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
 import { useDirectorySuggestions } from "../../lib/useDirectorySuggestions";
@@ -176,6 +180,13 @@ export function SettingsPane() {
               <span className="text-primary font-medium">FlipperUI</span>
               <span className="text-secondary">A Flipper Zero Manager and qFlipper replacement, focused on file browsing and organized libraries for SubGHz, Infrared, NFC and everything else.</span>
               <span className="text-dim italic mt-0.5">in love -maz</span>
+              <button
+                onClick={() => openUrl("mailto:maz@postcatz.com")}
+                className="flex items-center gap-1 text-[10px] text-dim hover:text-secondary mt-1 w-fit transition-colors"
+              >
+                <Mail size={9} />
+                send me a mail :)
+              </button>
             </div>
           </div>
         </Section>
@@ -392,9 +403,56 @@ export function SettingsPane() {
             <span className="text-dim">Open →</span>
           </button>
         </Section>
+
+        <SettingsFooter version={version} />
       </div>
 
       {diagOpen && <DiagPanel onClose={() => setDiagOpen(false)} />}
+    </div>
+  );
+}
+
+const REPO_URL = "https://github.com/fuckmaz/FlipperUI";
+
+function SettingsFooter({ version }: { version: string | null }) {
+  const openIssue = (kind: "bug" | "feedback") => {
+    const meta = [
+      version ? `App version: ${version}` : "",
+      `Platform: ${navigator.platform}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (kind === "bug") {
+      const body = `**Describe the bug**\nA clear and concise description of what happened.\n\n**Steps to reproduce**\n1. …\n\n**Expected behavior**\n…\n\n---\n${meta}`;
+      openUrl(
+        `${REPO_URL}/issues/new?labels=bug&title=&body=${encodeURIComponent(body)}`,
+      );
+    } else {
+      const body = `**Feedback**\n\n\n---\n${meta}`;
+      openUrl(
+        `${REPO_URL}/issues/new?labels=feedback&title=&body=${encodeURIComponent(body)}`,
+      );
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-4 py-3 text-[11px] text-dim">
+      <button
+        onClick={() => openIssue("bug")}
+        className="flex items-center gap-1.5 hover:text-secondary transition-colors"
+      >
+        <Bug size={11} />
+        Report a bug
+      </button>
+      <span className="text-border-subtle">·</span>
+      <button
+        onClick={() => openIssue("feedback")}
+        className="flex items-center gap-1.5 hover:text-secondary transition-colors"
+      >
+        <MessageSquare size={11} />
+        Send feedback
+      </button>
     </div>
   );
 }

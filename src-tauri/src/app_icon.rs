@@ -8,6 +8,8 @@
 //! rerun `cargo run --features icon-gen --bin gen_app_icons` to produce
 //! sized PNGs (or hand-author them), then add a `Variant` entry below.
 
+use std::sync::Mutex;
+
 use tauri::image::Image;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
@@ -68,6 +70,10 @@ const VARIANTS: &[Variant] = &[
     },
 ];
 
+/// Process-wide active variant, updated by `apply_app_icon`. Read by
+/// `tray_icon_for` so the tray stays in sync with the app icon choice.
+static CURRENT_VARIANT: Mutex<&'static str> = Mutex::new(VARIANT_DEFAULT);
+
 /// Return the list of variants for the chooser UI. Cheap to call: the PNG
 /// bytes are static and base64 encoding runs O(n) over ~20 KB.
 pub fn variants() -> Vec<VariantDescriptor> {
@@ -92,6 +98,16 @@ fn png_for(id: &str) -> &'static [u8] {
         .find(|v| v.id == id)
         .map(|v| v.png)
         .unwrap_or(DEFAULT_ICON_PNG)
+}
+
+/// Return the PNG bytes for the currently active variant. Used by
+/// `tray_icon_for` so re-installs of the tray pick up the right icon.
+pub fn current_variant_png() -> &'static [u8] {
+    let id = CURRENT_VARIANT
+        .lock()
+        .map(|g| *g)
+        .unwrap_or(VARIANT_DEFAULT);
+    png_for(id)
 }
 
 /// True when `id` matches a known variant. The frontend should reject
@@ -123,6 +139,10 @@ pub fn apply_app_icon(app: &AppHandle, id: &str) -> Result<&'static str, Flipper
             tracing::warn!("unknown app-icon variant '{id}', falling back to default");
             VARIANT_DEFAULT
         });
+    if let Ok(mut guard) = CURRENT_VARIANT.lock() {
+        *guard = canonical;
+    }
+
     let png = png_for(canonical);
     let image = Image::from_bytes(png)
         .map_err(|e| FlipperError::Internal(format!("decode app-icon PNG: {e}")))?;
@@ -182,6 +202,15 @@ pub fn apply_app_icon(app: &AppHandle, id: &str) -> Result<&'static str, Flipper
         });
         if let Err(e) = dispatch_result {
             tracing::warn!("dock-icon dispatch failed: {e}");
+        }
+    }
+
+    // Sync the tray icon with the new variant (unless monochrome overrides).
+    if !crate::commands::tray::tray_monochrome() {
+        if let Some(tray) = app.tray_by_id(crate::TRAY_ID) {
+            if let Ok(icon) = Image::from_bytes(png) {
+                let _ = tray.set_icon(Some(icon));
+            }
         }
     }
 
@@ -257,7 +286,7 @@ fn apply_taskbar_icon(app: &AppHandle, png: &[u8]) -> Result<(), FlipperError> {
     unsafe {
         let hdc = GetDC(None);
 
-        let bmi = BITMAPINFO {
+        let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
                 biWidth: width,
