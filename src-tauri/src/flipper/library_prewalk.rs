@@ -56,7 +56,15 @@ pub fn prewalk(
     let mut out = Vec::new();
     let mut visited: u32 = 0;
     for root in roots {
-        walk(client, root, excluded, cancelled, &mut visited, on_progress, &mut out)?;
+        walk(
+            client,
+            root,
+            excluded,
+            cancelled,
+            &mut visited,
+            on_progress,
+            &mut out,
+        )?;
     }
     on_progress(visited, visited, "");
     Ok(out)
@@ -137,7 +145,15 @@ fn walk(
     });
 
     for child in subdirs {
-        walk(client, &child, excluded, cancelled, visited, on_progress, out)?;
+        walk(
+            client,
+            &child,
+            excluded,
+            cancelled,
+            visited,
+            on_progress,
+            out,
+        )?;
     }
 
     Ok(())

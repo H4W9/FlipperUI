@@ -50,7 +50,14 @@ pub async fn library_prewalk(
     cancelled.store(false, Ordering::Relaxed);
 
     tauri::async_runtime::spawn_blocking(move || {
-        prewalk_blocking(client_mutex, mode_mutex, cancelled, app, roots, excluded_dirs)
+        prewalk_blocking(
+            client_mutex,
+            mode_mutex,
+            cancelled,
+            app,
+            roots,
+            excluded_dirs,
+        )
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?
