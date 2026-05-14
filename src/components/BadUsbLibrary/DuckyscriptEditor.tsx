@@ -33,7 +33,7 @@ const editorTheme = EditorView.theme({
   },
   ".cm-content": {
     padding: "10px 0",
-    caretColor: "#ff8300",
+    caretColor: "var(--color-accent)",
   },
   ".cm-line": {
     padding: "0 12px",
@@ -44,14 +44,15 @@ const editorTheme = EditorView.theme({
     borderRight: "1px solid #27272a",
   },
   ".cm-activeLine": {
-    backgroundColor: "rgba(255, 131, 0, 0.08)",
+    backgroundColor: "color-mix(in srgb, var(--color-accent) 8%, transparent)",
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "rgba(255, 131, 0, 0.08)",
+    backgroundColor: "color-mix(in srgb, var(--color-accent) 8%, transparent)",
     color: "#a1a1aa",
   },
   ".cm-selectionBackground, .cm-content ::selection": {
-    backgroundColor: "rgba(255, 131, 0, 0.28) !important",
+    backgroundColor:
+      "color-mix(in srgb, var(--color-accent) 28%, transparent) !important",
   },
   ".cm-tooltip": {
     backgroundColor: "#18181b",
@@ -59,7 +60,7 @@ const editorTheme = EditorView.theme({
     color: "#f4f4f5",
   },
   ".cm-tooltip-autocomplete ul li[aria-selected]": {
-    backgroundColor: "rgba(255, 131, 0, 0.18)",
+    backgroundColor: "color-mix(in srgb, var(--color-accent) 18%, transparent)",
     color: "#f4f4f5",
   },
 });

@@ -90,7 +90,7 @@ export function BadUsbLibrary() {
         await saveBadUsbCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
-      void notify("BadUSB scan complete", `${list.length} entries indexed.`);
+      void notify("libraryScan", "BadUSB scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

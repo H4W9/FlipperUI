@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- BLE File Explorer uploads now use reliable acknowledged writes, smaller BLE storage chunks, byte-based progress, matching ACK handling, and clean reconnect recovery instead of timing out after the file data is queued.
+
 ## [0.4.0] — 2026-05-11
 
 ### Added

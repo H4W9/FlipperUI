@@ -328,9 +328,10 @@ export function DevicePanel() {
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 bg-panel border-b border-flipper shrink-0">
-      {/* Title */}
+      {/* Title — the "UI" orange is the FlipperUI brand mark, intentionally
+          pinned to Flipper Zero orange regardless of the theme accent. */}
       <span className="font-semibold text-sm text-white">
-        Flipper<span className="text-accent">UI</span>
+        Flipper<span style={{ color: "#ff8300" }}>UI</span>
       </span>
 
       <div className="w-px h-4 bg-elevated mx-1" />

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -27,6 +27,12 @@ import { DiagPanel } from "../DevTools/DiagPanel";
 import { loadSettings, subscribeSettings, updateSettings, type AppSettings } from "../../lib/settings";
 import { useDirectorySuggestions } from "../../lib/useDirectorySuggestions";
 import { appIconVariants, setAppIcon, type AppIconVariant } from "../../lib/tauri";
+import {
+  ACCENT_PRESETS,
+  FLIPPER_ORANGE,
+  applyAccentColor,
+  normalizeHex,
+} from "../../lib/theme";
 import { LibraryExclusionsEditor } from "./LibraryExclusionsEditor";
 
 const IS_MACOS =
@@ -91,8 +97,17 @@ export function SettingsPane() {
     );
   };
 
-  const onNotificationsEnabledChange = async (enabled: boolean) => {
-    const next = await updateSettings({ notifications: { enabled } });
+  const onLibraryScanNotifChange = async (libraryScansFinished: boolean) => {
+    const next = await updateSettings({
+      notifications: { libraryScansFinished },
+    });
+    setSettings(next);
+  };
+
+  const onDisconnectNotifChange = async (deviceDisconnected: boolean) => {
+    const next = await updateSettings({
+      notifications: { deviceDisconnected },
+    });
     setSettings(next);
   };
 
@@ -129,6 +144,23 @@ export function SettingsPane() {
   const onGifDirChange = async (gifDir: string | null) => {
     const next = await updateSettings({ screenStream: { gifDir } });
     setSettings(next);
+  };
+
+  // Apply live first (cheap CSS-var write) then persist; on failure we
+  // roll the CSS-var change back so the running app matches storage.
+  const onAccentChange = async (hex: string) => {
+    const normalized = normalizeHex(hex) ?? FLIPPER_ORANGE;
+    const previous = settings?.appearance.themeAccent ?? FLIPPER_ORANGE;
+    if (previous === normalized) return;
+    applyAccentColor(normalized);
+    try {
+      const next = await updateSettings({
+        appearance: { themeAccent: normalized },
+      });
+      setSettings(next);
+    } catch {
+      applyAccentColor(previous);
+    }
   };
 
   const onAppIconChange = async (variantId: string) => {
@@ -227,6 +259,18 @@ export function SettingsPane() {
             selected={settings?.appearance.appIcon ?? "default"}
             disabled={!settings || iconVariants.length === 0}
             onChange={onAppIconChange}
+          />
+          <div className="h-px bg-border-subtle" />
+          <Row
+            label="Theme accent"
+            hint="Tint applied to highlights, focus rings, and active states. The FlipperUI brand orange in the splash and app header stays as-is."
+          >
+            <span />
+          </Row>
+          <AccentColorChooser
+            value={settings?.appearance.themeAccent ?? FLIPPER_ORANGE}
+            disabled={!settings}
+            onChange={onAccentChange}
           />
         </Section>
 
@@ -336,14 +380,25 @@ export function SettingsPane() {
 
         <Section icon={<Bell size={13} />} title="Notifications">
           <Row
-            label="OS notifications"
-            hint="Show desktop notifications when library scans or transfers finish, and when the device disconnects. The first notification will prompt for OS-level permission."
+            label="Library scan finished"
+            hint="Show a desktop notification each time a library scan (Sub-GHz / Infrared / NFC / RFID / BadUSB / Apps) finishes. The first notification will prompt for OS-level permission."
           >
             <Toggle
-              checked={settings?.notifications.enabled ?? true}
+              checked={settings?.notifications.libraryScansFinished ?? true}
               disabled={!settings}
-              onChange={onNotificationsEnabledChange}
-              ariaLabel="OS notifications"
+              onChange={onLibraryScanNotifChange}
+              ariaLabel="Library scan finished notification"
+            />
+          </Row>
+          <Row
+            label="Device disconnected"
+            hint="Show a desktop notification when the Flipper drops unexpectedly. Manual disconnects via the toolbar never notify."
+          >
+            <Toggle
+              checked={settings?.notifications.deviceDisconnected ?? true}
+              disabled={!settings}
+              onChange={onDisconnectNotifChange}
+              ariaLabel="Device disconnected notification"
             />
           </Row>
         </Section>
@@ -588,6 +643,84 @@ function AppIconChooser({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function AccentColorChooser({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (hex: string) => void;
+}) {
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
+  const normalized = (normalizeHex(value) ?? FLIPPER_ORANGE).toLowerCase();
+  const matchedPreset = ACCENT_PRESETS.find(
+    (p) => p.hex.toLowerCase() === normalized,
+  );
+  const isCustom = !matchedPreset;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {ACCENT_PRESETS.map((p) => {
+        const isSelected = p.hex.toLowerCase() === normalized;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(p.hex)}
+            aria-pressed={isSelected}
+            aria-label={`Use ${p.label} accent color`}
+            title={p.label}
+            className={`relative h-7 w-7 rounded-full border-2 transition-transform disabled:opacity-40 disabled:cursor-not-allowed ${
+              isSelected
+                ? "border-primary scale-105"
+                : "border-border-subtle hover:border-secondary"
+            }`}
+            style={{ backgroundColor: p.hex }}
+          />
+        );
+      })}
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => colorInputRef.current?.click()}
+        aria-label="Choose a custom accent color"
+        title={isCustom ? `Custom (${normalized})` : "Custom color"}
+        className={`relative h-7 w-7 rounded-full border-2 overflow-hidden transition-transform disabled:opacity-40 disabled:cursor-not-allowed ${
+          isCustom
+            ? "border-primary scale-105"
+            : "border-border-subtle hover:border-secondary"
+        }`}
+        style={
+          isCustom
+            ? { backgroundColor: normalized }
+            : {
+                background:
+                  "conic-gradient(from 0deg, #ef4444, #f59e0b, #facc15, #22c55e, #06b6d4, #3b82f6, #a855f7, #ec4899, #ef4444)",
+              }
+        }
+      />
+
+      <input
+        ref={colorInputRef}
+        type="color"
+        value={normalized}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        aria-hidden
+        tabIndex={-1}
+        className="sr-only absolute pointer-events-none"
+      />
+
+      {isCustom && (
+        <code className="text-[11px] text-dim font-mono ml-1">{normalized}</code>
+      )}
     </div>
   );
 }

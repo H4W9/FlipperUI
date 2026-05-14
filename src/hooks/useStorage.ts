@@ -55,7 +55,7 @@ export function useStorage() {
 
       await storageReadToLocal(remotePath, savePath);
       setTransferProgress(100);
-      void notify("Download complete", name);
+      void notify("transfer", "Download complete", name);
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);
@@ -96,7 +96,7 @@ export function useStorage() {
 
       await storageReadDirToLocal(remotePath, localDest);
       setTransferProgress(100);
-      void notify("Folder download complete", name);
+      void notify("transfer", "Folder download complete", name);
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);
@@ -135,7 +135,7 @@ export function useStorage() {
       // Only refresh the visible listing when the upload landed there;
       // otherwise the user is still looking at currentPath and we'd flicker.
       if (dir === currentPath) await refresh(currentPath);
-      void notify("Upload complete", basename(localPath) || "file");
+      void notify("transfer", "Upload complete", basename(localPath) || "file");
     } catch (e: unknown) {
       failed = true;
       const msg = String(e);

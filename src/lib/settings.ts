@@ -47,15 +47,23 @@ export interface AppSettings {
     monochromeIcon: boolean;
   };
   notifications: {
-    /** Master switch for OS notifications (library scans, transfers,
-     * disconnects). When false, no notifications are shown. */
-    enabled: boolean;
+    /** Show an OS notification when a library scan (Sub-GHz / Infrared /
+     * NFC / RFID / BadUSB / Apps) finishes. */
+    libraryScansFinished: boolean;
+    /** Show an OS notification when the Flipper disconnects unexpectedly.
+     * Manual disconnects via the UI do not emit a notification. */
+    deviceDisconnected: boolean;
   };
   appearance: {
     /** Selected app-icon variant id. Resolved server-side: unknown values
      * fall back to "default" without erroring. New variants can be added
      * without changing this type — the value is just a string. */
     appIcon: string;
+    /** Theme accent color, applied to `--color-accent` (and derived
+     * hover/dim variants) at runtime. Hex string `#rrggbb`. Default is
+     * Flipper Zero orange. The FlipperUI logo orange in the splash and
+     * app header is hardcoded and not affected by this setting. */
+    themeAccent: string;
   };
   screenStream: {
     /** Default folder for `Save screenshot`. When null, the save dialog opens
@@ -101,8 +109,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   badusb: { excludedDirs: [] },
   apps: { excludedDirs: [], extraDirs: [] },
   tray: { enabled: true, hideDockIcon: false, monochromeIcon: false },
-  notifications: { enabled: true },
-  appearance: { appIcon: "default" },
+  notifications: { libraryScansFinished: true, deviceDisconnected: true },
+  appearance: { appIcon: "default", themeAccent: "#ff8300" },
   screenStream: { screenshotDir: null, gifDir: null },
   connection: {
     transport: "usb",
@@ -144,10 +152,12 @@ export type SettingsPatch = {
     monochromeIcon?: boolean;
   };
   notifications?: {
-    enabled?: boolean;
+    libraryScansFinished?: boolean;
+    deviceDisconnected?: boolean;
   };
   appearance?: {
     appIcon?: string;
+    themeAccent?: string;
   };
   screenStream?: {
     screenshotDir?: string | null;
@@ -225,11 +235,17 @@ async function updateSettingsNow(patch: SettingsPatch): Promise<AppSettings> {
         patch.tray?.monochromeIcon ?? current.tray.monochromeIcon,
     },
     notifications: {
-      enabled:
-        patch.notifications?.enabled ?? current.notifications.enabled,
+      libraryScansFinished:
+        patch.notifications?.libraryScansFinished ??
+        current.notifications.libraryScansFinished,
+      deviceDisconnected:
+        patch.notifications?.deviceDisconnected ??
+        current.notifications.deviceDisconnected,
     },
     appearance: {
       appIcon: patch.appearance?.appIcon ?? current.appearance.appIcon,
+      themeAccent:
+        patch.appearance?.themeAccent ?? current.appearance.themeAccent,
     },
     screenStream: {
       screenshotDir:
@@ -324,12 +340,18 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
         raw.tray?.monochromeIcon ?? DEFAULT_SETTINGS.tray.monochromeIcon,
     },
     notifications: {
-      enabled:
-        raw.notifications?.enabled ?? DEFAULT_SETTINGS.notifications.enabled,
+      libraryScansFinished:
+        raw.notifications?.libraryScansFinished ??
+        DEFAULT_SETTINGS.notifications.libraryScansFinished,
+      deviceDisconnected:
+        raw.notifications?.deviceDisconnected ??
+        DEFAULT_SETTINGS.notifications.deviceDisconnected,
     },
     appearance: {
       appIcon:
         raw.appearance?.appIcon ?? DEFAULT_SETTINGS.appearance.appIcon,
+      themeAccent:
+        raw.appearance?.themeAccent ?? DEFAULT_SETTINGS.appearance.themeAccent,
     },
     screenStream: {
       screenshotDir:

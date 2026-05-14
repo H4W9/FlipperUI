@@ -18,7 +18,8 @@ import { Dashboard } from "./components/Dashboard/Dashboard";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
-import { loadSettings } from "./lib/settings";
+import { loadSettings, subscribeSettings } from "./lib/settings";
+import { applyAccentColor } from "./lib/theme";
 import { syncClockOnConnectIfEnabled } from "./lib/clockSync";
 import { notify } from "./lib/notify";
 import { usePreloadLibraries } from "./hooks/usePreloadLibraries";
@@ -49,6 +50,16 @@ export default function App() {
   // every startup. The Rust side creates the tray by default and leaves the
   // dock icon visible, so we only need to call through when the stored
   // settings differ from those defaults.
+  // Apply the persisted accent color as early as possible, and re-apply on
+  // every settings change. Done in its own effect (without deps) so it runs
+  // exactly once on mount and the subscription survives for the app lifetime.
+  useEffect(() => {
+    loadSettings()
+      .then((s) => applyAccentColor(s.appearance.themeAccent))
+      .catch(() => {});
+    return subscribeSettings((s) => applyAccentColor(s.appearance.themeAccent));
+  }, []);
+
   useEffect(() => {
     loadSettings()
       .then(async (s) => {
@@ -141,7 +152,7 @@ export default function App() {
 
     listen<string>("flipper-disconnected", async (event) => {
       setConnected(null);
-      void notify("Flipper disconnected", event.payload);
+      void notify("deviceDisconnected", "Flipper disconnected", event.payload);
       cancel();
       reconnectAttemptsRef.current = 0;
       const settings = await loadSettings().catch(() => null);

@@ -153,7 +153,7 @@ export function AppLibrary() {
         await saveAppsCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
-      void notify("App scan complete", `${list.length} apps indexed.`);
+      void notify("libraryScan", "App scan complete", `${list.length} apps indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

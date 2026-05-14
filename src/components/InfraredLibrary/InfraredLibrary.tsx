@@ -86,7 +86,7 @@ export function InfraredLibrary() {
         await saveInfraredCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
-      void notify("Infrared scan complete", `${list.length} entries indexed.`);
+      void notify("libraryScan", "Infrared scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {

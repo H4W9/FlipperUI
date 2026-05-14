@@ -1,30 +1,55 @@
 /**
  * Thin wrapper around tauri-plugin-notification.
  *
- * Gates every send on the persisted `notifications.enabled` setting and the
- * OS-level permission. Permission is requested lazily on first use and cached
- * for the rest of the process. All sends are best-effort — failures (e.g. user
- * denied permission, plugin missing on a non-desktop platform) silently no-op
- * so call sites don't have to wrap every notify in try/catch.
+ * Each notification belongs to a category; categories the user has disabled
+ * in Settings are dropped silently. Categories not surfaced in Settings
+ * (currently `"transfer"`) are always allowed subject to OS permission.
+ * Permission is requested lazily on first use and cached for the rest of the
+ * process. All sends are best-effort — failures (e.g. user denied permission,
+ * plugin missing on a non-desktop platform) silently no-op so call sites
+ * don't have to wrap every notify in try/catch.
  */
 import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import { loadSettings, subscribeSettings } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  subscribeSettings,
+  type AppSettings,
+} from "./settings";
 
-let enabled = true;
+export type NotificationCategory =
+  | "libraryScan"
+  | "deviceDisconnected"
+  | "transfer";
+
+let settings: AppSettings = DEFAULT_SETTINGS;
 let permissionState: "unknown" | "granted" | "denied" = "unknown";
 
 loadSettings()
   .then((s) => {
-    enabled = s.notifications.enabled;
+    settings = s;
   })
   .catch(() => {});
 subscribeSettings((s) => {
-  enabled = s.notifications.enabled;
+  settings = s;
 });
+
+function categoryAllowed(category: NotificationCategory): boolean {
+  switch (category) {
+    case "libraryScan":
+      return settings.notifications.libraryScansFinished;
+    case "deviceDisconnected":
+      return settings.notifications.deviceDisconnected;
+    case "transfer":
+      // No user-facing toggle for transfer notifications — they ride only
+      // on the OS-level permission check below.
+      return true;
+  }
+}
 
 async function ensurePermission(): Promise<boolean> {
   if (permissionState === "granted") return true;
@@ -44,8 +69,12 @@ async function ensurePermission(): Promise<boolean> {
   }
 }
 
-export async function notify(title: string, body?: string): Promise<void> {
-  if (!enabled) return;
+export async function notify(
+  category: NotificationCategory,
+  title: string,
+  body?: string,
+): Promise<void> {
+  if (!categoryAllowed(category)) return;
   if (!(await ensurePermission())) return;
   try {
     sendNotification({ title, body });

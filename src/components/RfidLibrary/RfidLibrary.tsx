@@ -88,7 +88,7 @@ export function RfidLibrary() {
         await saveRfidCache(deviceUid, list).catch(() => {});
         setCacheScannedAt(Date.now());
       }
-      void notify("RFID scan complete", `${list.length} entries indexed.`);
+      void notify("libraryScan", "RFID scan complete", `${list.length} entries indexed.`);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!msg.toLowerCase().includes("cancelled")) {
