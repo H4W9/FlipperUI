@@ -19,6 +19,7 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { SideRail } from "./components/Nav/SideRail";
 import { useFlipperStore, type ActiveView } from "./store/useFlipperStore";
 import { loadSettings } from "./lib/settings";
+import { syncClockOnConnectIfEnabled } from "./lib/clockSync";
 import { notify } from "./lib/notify";
 import { usePreloadLibraries } from "./hooks/usePreloadLibraries";
 import flipperOutlineUrl from "./assets/flipper-outline.svg";
@@ -102,18 +103,28 @@ export default function App() {
       }
 
       const { transport, lastPort, lastBleId, lastBleName } = settings.connection;
+      const maybeSyncClockAfterConnect = async (): Promise<string | null> => {
+        try {
+          await syncClockOnConnectIfEnabled();
+          return null;
+        } catch (e) {
+          return `Clock sync failed: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      };
       try {
         if (transport === "ble" && lastBleId) {
           const info = await connectBleDevice(lastBleId, lastBleName ?? undefined);
+          const clockError = await maybeSyncClockAfterConnect();
           setConnected(info, "ble");
-          setError(null);
+          setError(clockError);
           reconnectAttemptsRef.current = 0;
           return;
         }
         if (transport === "usb" && lastPort) {
           const info = await connect(lastPort);
+          const clockError = await maybeSyncClockAfterConnect();
           setConnected(info);
-          setError(null);
+          setError(clockError);
           reconnectAttemptsRef.current = 0;
           return;
         }

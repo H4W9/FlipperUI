@@ -106,6 +106,12 @@ impl BleTransport {
     fn wait_free(&self, needed: u32) -> io::Result<()> {
         let deadline = Instant::now() + FLOW_WAIT_TIMEOUT;
         loop {
+            if self.rx.inner.lock().unwrap().closed {
+                return Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "BLE transport closed during write",
+                ));
+            }
             let free = self.overflow.load(Ordering::SeqCst);
             if free >= needed {
                 return Ok(());
@@ -219,10 +225,14 @@ impl Transport for BleTransport {
         for piece in buf.chunks(MAX_WRITE_LEN) {
             let n = piece.len() as u32;
             self.wait_free(n)?;
+            // Match the official mobile apps: use acknowledged GATT writes so
+            // CoreBluetooth gives us real host-side backpressure. Without this,
+            // macOS can accept a large upload into its local queue instantly and
+            // the final RPC ACK times out even though the UI already reached 100%.
             BLE_RT
                 .block_on(
                     self.peripheral
-                        .write(&self.rx_char, piece, WriteType::WithoutResponse),
+                        .write(&self.rx_char, piece, WriteType::WithResponse),
                 )
                 .map_err(|e| io::Error::other(e.to_string()))?;
             // Optimistically deduct from our local free-bytes estimate. The
@@ -240,8 +250,8 @@ impl Transport for BleTransport {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        // Writes are WriteType::WithoutResponse and there's no OS-level buffer
-        // to flush. Flow-control waiting happens per-chunk inside write_all.
+        // WithResponse writes complete per BLE packet; flow-control waiting also
+        // happens per chunk inside write_all.
         Ok(())
     }
 

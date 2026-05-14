@@ -47,6 +47,11 @@ pub fn with_client<T>(
 /// True for errors that mean the byte-stream/framing is unrecoverable.
 /// Anything else (RPC status errors, timeouts, validation) leaves the
 /// connection healthy.
+///
+/// BLE flow-control and BLE write timeouts surface here as `Io(TimedOut)` —
+/// they mean the firmware momentarily fell behind, not that the link is dead.
+/// Treating them as fatal (as past versions did) tore down the connection
+/// mid-transfer on large uploads, so they are deliberately kept transient.
 fn is_fatal_transport_error(e: &FlipperError) -> bool {
     match e {
         FlipperError::Serial(_) => true,

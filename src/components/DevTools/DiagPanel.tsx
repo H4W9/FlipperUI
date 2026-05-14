@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { X, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, Activity } from "lucide-react";
 import {
   diagEnable,
   diagEntries,
@@ -146,6 +146,7 @@ export function DiagPanel({ onClose }: DiagPanelProps) {
                     <th className="px-2 py-1 font-normal">time</th>
                     <th className="px-2 py-1 font-normal">id</th>
                     <th className="px-2 py-1 font-normal">kind</th>
+                    <th className="px-2 py-1 font-normal">detail</th>
                     <th className="px-2 py-1 font-normal text-right">bytes</th>
                     <th className="px-2 py-1 font-normal text-right">status</th>
                   </tr>
@@ -159,15 +160,22 @@ export function DiagPanel({ onClose }: DiagPanelProps) {
                       <td className="px-2 py-0.5">
                         {e.dir === "Tx" ? (
                           <ArrowUpRight size={11} className="text-accent" />
-                        ) : (
+                        ) : e.dir === "Rx" ? (
                           <ArrowDownLeft size={11} className="text-success" />
+                        ) : (
+                          <Activity size={11} className="text-secondary" />
                         )}
                       </td>
                       <td className="px-2 py-0.5 text-dim">{formatTime(e.ts_ms)}</td>
-                      <td className="px-2 py-0.5 text-secondary">{e.command_id}</td>
+                      <td className="px-2 py-0.5 text-secondary">
+                        {e.command_id || <span className="text-dim">—</span>}
+                      </td>
                       <td className="px-2 py-0.5 text-primary truncate max-w-[280px]">
                         {e.content_kind || <span className="text-dim">—</span>}
                         {e.has_next && <span className="ml-1 text-dim">…</span>}
+                      </td>
+                      <td className="px-2 py-0.5 text-secondary truncate max-w-[300px]">
+                        {e.detail || <span className="text-dim">—</span>}
                       </td>
                       <td className="px-2 py-0.5 text-right text-secondary">{e.payload_bytes}</td>
                       <td
@@ -175,7 +183,7 @@ export function DiagPanel({ onClose }: DiagPanelProps) {
                           e.command_status !== 0 ? "text-danger" : "text-dim"
                         }`}
                       >
-                        {e.command_status}
+                        {e.command_status_name || e.command_status}
                       </td>
                     </tr>
                   ))}

@@ -7,7 +7,7 @@ use crate::pb;
 use crate::pb::main::Content;
 
 /// Hard cap on a single PB.Main frame. Real Flipper RPC messages are well
-/// under 64 KB (largest payload is a 512-byte storage chunk plus envelope);
+/// under 64 KB (storage writes use 8 KB chunks plus protobuf envelope);
 /// 1 MiB is a generous ceiling that still bounds memory if a corrupt or
 /// malicious stream announces a huge length prefix.
 pub const MAX_FRAME_SIZE: usize = 1 << 20;

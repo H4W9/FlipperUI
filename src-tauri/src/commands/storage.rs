@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -9,10 +9,11 @@ use crate::commands::client::with_client;
 use crate::commands::path::validate_path;
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::diag;
 use crate::flipper::library_walk;
 use crate::flipper::storage;
 use crate::pb_storage;
-use crate::state::AppState;
+use crate::state::{AppState, ConnectionMode};
 
 fn join_remote(dir: &str, name: &str) -> String {
     if dir.ends_with('/') {
@@ -28,6 +29,54 @@ fn begin_transfer(generation: &AtomicU64) -> u64 {
 
 fn transfer_cancelled(cancelled_generation: &AtomicU64, generation: u64) -> bool {
     cancelled_generation.load(Ordering::Relaxed) == generation
+}
+
+fn upload_progress_pct(sent: usize, total: usize) -> u32 {
+    if total == 0 {
+        return 100;
+    }
+    if sent >= total {
+        return 99;
+    }
+    ((sent * 100 / total) as u32).clamp(1, 99)
+}
+
+fn with_transfer_client<T>(
+    mode_mutex: &Arc<Mutex<ConnectionMode>>,
+    client_mutex: &Arc<Mutex<Option<FlipperClient>>>,
+    ble_cancel_tx: &Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+    app: &AppHandle,
+    f: impl FnOnce(&mut FlipperClient) -> Result<T>,
+) -> Result<T> {
+    let result = with_client(mode_mutex, client_mutex, f);
+    if let Err(e) = &result {
+        if is_fatal_transfer_error(e) {
+            tracing::warn!("tearing down connection after transfer RPC failure: {e}");
+            diag::log_event("TransferConnectionTornDown", e.to_string());
+            if let Ok(mut guard) = client_mutex.lock() {
+                *guard = None;
+            }
+            if let Ok(mut tx_guard) = ble_cancel_tx.lock() {
+                if let Some(tx) = tx_guard.take() {
+                    let _ = tx.send(());
+                }
+            }
+            let _ = app.emit("flipper-disconnected", e.to_string());
+        }
+    }
+    result
+}
+
+fn is_fatal_transfer_error(e: &FlipperError) -> bool {
+    match e {
+        FlipperError::Serial(_) => true,
+        FlipperError::Io(io) => !matches!(
+            io.kind(),
+            std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+        ),
+        FlipperError::Decode(_) | FlipperError::Encode(_) => true,
+        _ => false,
+    }
 }
 
 fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
@@ -153,6 +202,7 @@ pub async fn storage_write(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
+    let ble_cancel_tx = Arc::clone(&state.ble_cancel_tx);
     let generation = begin_transfer(&state.transfer_generation);
     let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
@@ -161,18 +211,23 @@ pub async fn storage_write(
         let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
             .map_err(|e| FlipperError::Session(format!("base64 decode error: {e}")))?;
 
-        with_client(&mode_mutex, &client_mutex, |c| {
+        let app_for_progress = app.clone();
+        let result = with_transfer_client(&mode_mutex, &client_mutex, &ble_cancel_tx, &app, |c| {
             storage::storage_write(
                 c,
                 &path,
                 &bytes,
                 |sent, total| {
-                    let pct = (sent * 100 / total) as u32;
-                    let _ = app.emit("upload-progress", pct);
+                    let pct = upload_progress_pct(sent, total);
+                    let _ = app_for_progress.emit("upload-progress", pct);
                 },
                 || transfer_cancelled(&cancelled_generation, generation),
             )
-        })
+        });
+        if result.is_ok() {
+            let _ = app.emit("upload-progress", 100);
+        }
+        result
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?
@@ -226,24 +281,30 @@ pub async fn storage_write_from_local(
 ) -> Result<()> {
     let client_mutex = Arc::clone(&state.client);
     let mode_mutex = Arc::clone(&state.mode);
+    let ble_cancel_tx = Arc::clone(&state.ble_cancel_tx);
     let generation = begin_transfer(&state.transfer_generation);
     let cancelled_generation = Arc::clone(&state.transfer_cancelled_generation);
 
     tauri::async_runtime::spawn_blocking(move || {
         validate_path(&path)?;
         let bytes = std::fs::read(local_path)?;
-        with_client(&mode_mutex, &client_mutex, |c| {
+        let app_for_progress = app.clone();
+        let result = with_transfer_client(&mode_mutex, &client_mutex, &ble_cancel_tx, &app, |c| {
             storage::storage_write(
                 c,
                 &path,
                 &bytes,
                 |sent, total| {
-                    let pct = (sent * 100 / total) as u32;
-                    let _ = app.emit("upload-progress", pct);
+                    let pct = upload_progress_pct(sent, total);
+                    let _ = app_for_progress.emit("upload-progress", pct);
                 },
                 || transfer_cancelled(&cancelled_generation, generation),
             )
-        })
+        });
+        if result.is_ok() {
+            let _ = app.emit("upload-progress", 100);
+        }
+        result
     })
     .await
     .map_err(|e| FlipperError::Internal(e.to_string()))?

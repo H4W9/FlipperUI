@@ -469,11 +469,13 @@ export const appsReadIcon = async (path: string): Promise<string | null> => {
 
 export interface DiagEntry {
   ts_ms: number;
-  dir: "Tx" | "Rx";
+  dir: "Tx" | "Rx" | "Event";
   command_id: number;
   command_status: number;
+  command_status_name: string;
   has_next: boolean;
   content_kind: string;
+  detail: string;
   payload_bytes: number;
 }
 

@@ -1,12 +1,42 @@
 use crate::error::{FlipperError, Result};
 use crate::flipper::client::FlipperClient;
+use crate::flipper::diag;
 use crate::flipper::framing::{read_response, write_message};
 use crate::flipper::session::check_response;
+use crate::flipper::transport::TransportKind;
 use crate::pb;
 use crate::pb::main::Content;
 use crate::pb_storage;
+use std::time::Duration;
 
-const WRITE_CHUNK_SIZE: usize = 8192; // 8 KB — larger chunks reduce RPC overhead
+const SERIAL_WRITE_CHUNK_SIZE: usize = 8192;
+const BLE_WRITE_CHUNK_SIZE: usize = 512;
+const BLE_WRITE_ACK_TIMEOUT: Duration = Duration::from_secs(30);
+const NORMAL_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn write_chunk_size(kind: TransportKind) -> usize {
+    match kind {
+        TransportKind::Serial => SERIAL_WRITE_CHUNK_SIZE,
+        TransportKind::Ble => BLE_WRITE_CHUNK_SIZE,
+    }
+}
+
+fn read_matching_response(client: &mut FlipperClient, expected_id: u32) -> Result<pb::Main> {
+    loop {
+        let msg = read_response(&mut *client.transport)?;
+        if msg.command_id == expected_id {
+            check_response(&msg, expected_id)?;
+            return Ok(msg);
+        }
+        diag::log_event(
+            "StorageWriteForeignResponse",
+            format!(
+                "expected_command_id={} received_command_id={} has_next={}",
+                expected_id, msg.command_id, msg.has_next
+            ),
+        );
+    }
+}
 
 /// Send a single request and read one response, validating command_id + status.
 fn send_single(client: &mut FlipperClient, content: Content) -> Result<pb::Main> {
@@ -129,11 +159,12 @@ where
 }
 
 /// Write data to a file on the Flipper.
-/// Large files are split into 8KB chunks, each sent as a separate protobuf frame
-/// with the same command_id. has_next=true on all but the final frame.
+/// Large files are split into transport-specific chunks, each sent as a
+/// separate protobuf frame with the same command_id. BLE follows the official
+/// mobile app's 512-byte storage chunks; serial keeps larger 8 KiB chunks.
 ///
-/// `on_progress(chunks_sent, total_chunks)` is called after each chunk is written to the
-/// serial port, so the caller can report progress upstream (e.g. via Tauri events).
+/// `on_progress(bytes_sent, total_bytes)` is called after each chunk is written
+/// to the transport, so the caller can report progress upstream.
 /// `cancelled` is checked between chunks — if set, the transfer aborts early.
 pub fn storage_write<F>(
     client: &mut FlipperClient,
@@ -146,14 +177,28 @@ where
     F: Fn(usize, usize),
 {
     let id = client.next_command_id();
+    let kind = client.kind();
+    let chunk_size = write_chunk_size(kind);
+    diag::log_event(
+        "StorageWriteStart",
+        format!(
+            "path={} bytes={} chunk_size={} transport={:?}",
+            path,
+            data.len(),
+            chunk_size,
+            kind
+        ),
+    );
 
     // Ensure at least one frame is sent even for empty files
     let chunks: Vec<&[u8]> = if data.is_empty() {
         vec![&[]]
     } else {
-        data.chunks(WRITE_CHUNK_SIZE).collect()
+        data.chunks(chunk_size).collect()
     };
-    let total = chunks.len();
+    let total_chunks = chunks.len();
+    let total_bytes = data.len();
+    let mut bytes_sent = 0usize;
 
     for (i, chunk) in chunks.iter().enumerate() {
         if cancelled() {
@@ -180,7 +225,7 @@ where
             return Err(FlipperError::TransferCancelled);
         }
 
-        let is_last = i == total - 1;
+        let is_last = i == total_chunks - 1;
         let frame = pb::Main {
             command_id: id,
             command_status: 0,
@@ -197,12 +242,28 @@ where
             })),
         };
         write_message(&mut *client.transport, &frame)?;
-        on_progress(i + 1, total);
+        bytes_sent = bytes_sent.saturating_add(chunk.len()).min(total_bytes);
+        on_progress(bytes_sent, total_bytes);
     }
 
     // Device responds once with Empty after receiving all chunks
-    let resp = read_response(&mut *client.transport)?;
-    check_response(&resp, id)?;
+    diag::log_event(
+        "StorageWriteAwaitAck",
+        format!("command_id={} bytes={}", id, total_bytes),
+    );
+    if kind == TransportKind::Ble {
+        client.transport.set_timeout(BLE_WRITE_ACK_TIMEOUT)?;
+    }
+    let ack_result = read_matching_response(client, id);
+    if kind == TransportKind::Ble {
+        let restore_result = client.transport.set_timeout(NORMAL_RPC_TIMEOUT);
+        restore_result?;
+    }
+    ack_result?;
+    diag::log_event(
+        "StorageWriteComplete",
+        format!("command_id={} bytes={}", id, total_bytes),
+    );
     Ok(())
 }
 
@@ -315,4 +376,302 @@ pub fn storage_tar_extract(
         }),
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flipper::framing::read_varint;
+    use crate::flipper::transport::{Transport, TransportKind};
+    use prost::Message;
+    use std::collections::VecDeque;
+    use std::io;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    struct RecordingTransport {
+        kind: TransportKind,
+        writes: Arc<Mutex<Vec<u8>>>,
+        reads: VecDeque<u8>,
+        timeout_when_empty: bool,
+    }
+
+    impl RecordingTransport {
+        fn new(kind: TransportKind, response_command_id: u32) -> (Self, Arc<Mutex<Vec<u8>>>) {
+            Self::with_responses(kind, vec![Self::ok_response(response_command_id)])
+        }
+
+        fn with_responses(
+            kind: TransportKind,
+            responses: Vec<pb::Main>,
+        ) -> (Self, Arc<Mutex<Vec<u8>>>) {
+            let writes = Arc::new(Mutex::new(Vec::new()));
+            let mut framed = Vec::new();
+            for response in responses {
+                let encoded = response.encode_to_vec();
+                framed.extend_from_slice(&encode_varint(encoded.len() as u64));
+                framed.extend_from_slice(&encoded);
+            }
+
+            (
+                Self {
+                    kind,
+                    writes: Arc::clone(&writes),
+                    reads: framed.into(),
+                    timeout_when_empty: false,
+                },
+                writes,
+            )
+        }
+
+        fn ok_response(response_command_id: u32) -> pb::Main {
+            pb::Main {
+                command_id: response_command_id,
+                command_status: 0,
+                has_next: false,
+                content: Some(Content::Empty(pb::Empty {})),
+            }
+        }
+
+        fn timeout(kind: TransportKind) -> (Self, Arc<Mutex<Vec<u8>>>) {
+            let writes = Arc::new(Mutex::new(Vec::new()));
+            (
+                Self {
+                    kind,
+                    writes: Arc::clone(&writes),
+                    reads: VecDeque::new(),
+                    timeout_when_empty: true,
+                },
+                writes,
+            )
+        }
+    }
+
+    impl Transport for RecordingTransport {
+        fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+            for slot in buf {
+                *slot = self.reads.pop_front().ok_or_else(|| {
+                    if self.timeout_when_empty {
+                        io::Error::new(io::ErrorKind::TimedOut, "BLE read timeout")
+                    } else {
+                        io::Error::new(io::ErrorKind::UnexpectedEof, "no response bytes")
+                    }
+                })?;
+            }
+            Ok(())
+        }
+
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let take = buf.len().min(self.reads.len());
+            for slot in &mut buf[..take] {
+                *slot = self.reads.pop_front().unwrap();
+            }
+            Ok(take)
+        }
+
+        fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+            self.writes.lock().unwrap().extend_from_slice(buf);
+            Ok(())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_timeout(&mut self, _dur: Duration) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn unread(&mut self, bytes: &[u8]) {
+            for b in bytes.iter().rev() {
+                self.reads.push_front(*b);
+            }
+        }
+
+        fn kind(&self) -> TransportKind {
+            self.kind
+        }
+    }
+
+    fn encode_varint(mut value: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        loop {
+            let byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value == 0 {
+                out.push(byte);
+                break;
+            }
+            out.push(byte | 0x80);
+        }
+        out
+    }
+
+    fn decode_written_messages(bytes: &[u8]) -> Vec<pb::Main> {
+        struct CursorTransport {
+            bytes: VecDeque<u8>,
+        }
+
+        impl Transport for CursorTransport {
+            fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+                for slot in buf {
+                    *slot = self
+                        .bytes
+                        .pop_front()
+                        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "no bytes"))?;
+                }
+                Ok(())
+            }
+
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                let take = buf.len().min(self.bytes.len());
+                for slot in &mut buf[..take] {
+                    *slot = self.bytes.pop_front().unwrap();
+                }
+                Ok(take)
+            }
+
+            fn write_all(&mut self, _buf: &[u8]) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn set_timeout(&mut self, _dur: Duration) -> io::Result<()> {
+                Ok(())
+            }
+
+            fn unread(&mut self, bytes: &[u8]) {
+                for b in bytes.iter().rev() {
+                    self.bytes.push_front(*b);
+                }
+            }
+
+            fn kind(&self) -> TransportKind {
+                TransportKind::Serial
+            }
+        }
+
+        let mut t = CursorTransport {
+            bytes: bytes.iter().copied().collect(),
+        };
+        let mut messages = Vec::new();
+        while !t.bytes.is_empty() {
+            let len = read_varint(&mut t).unwrap() as usize;
+            let mut body = vec![0; len];
+            t.read_exact(&mut body).unwrap();
+            messages.push(pb::Main::decode(body.as_slice()).unwrap());
+        }
+        messages
+    }
+
+    #[test]
+    fn ble_storage_write_uses_512_byte_payload_chunks() {
+        let (transport, writes) = RecordingTransport::new(TransportKind::Ble, 1);
+        let mut client = FlipperClient::new(Box::new(transport));
+        let data = vec![0x42; 80 * 1024];
+
+        storage_write(
+            &mut client,
+            "/ext/apps/ACAB/app.fap",
+            &data,
+            |_, _| {},
+            || false,
+        )
+        .unwrap();
+
+        let written = writes.lock().unwrap().clone();
+        let frames = decode_written_messages(&written);
+        assert_eq!(frames.len(), 160); // 80 * 1024 / 512
+        for (i, frame) in frames.iter().enumerate() {
+            assert_eq!(frame.command_id, 1);
+            assert_eq!(frame.has_next, i + 1 != frames.len());
+            let Some(Content::StorageWriteRequest(req)) = &frame.content else {
+                panic!("expected StorageWriteRequest");
+            };
+            assert_eq!(req.file.as_ref().unwrap().data.len(), BLE_WRITE_CHUNK_SIZE);
+        }
+    }
+
+    #[test]
+    fn serial_storage_write_keeps_8k_payload_chunks() {
+        let (transport, writes) = RecordingTransport::new(TransportKind::Serial, 1);
+        let mut client = FlipperClient::new(Box::new(transport));
+        let data = vec![0x42; 80 * 1024];
+
+        storage_write(
+            &mut client,
+            "/ext/apps/ACAB/app.fap",
+            &data,
+            |_, _| {},
+            || false,
+        )
+        .unwrap();
+
+        let written = writes.lock().unwrap().clone();
+        let frames = decode_written_messages(&written);
+        assert_eq!(frames.len(), 10); // 80 * 1024 / 8192
+        for (i, frame) in frames.iter().enumerate() {
+            assert_eq!(frame.command_id, 1);
+            assert_eq!(frame.has_next, i + 1 != frames.len());
+            let Some(Content::StorageWriteRequest(req)) = &frame.content else {
+                panic!("expected StorageWriteRequest");
+            };
+            assert_eq!(
+                req.file.as_ref().unwrap().data.len(),
+                SERIAL_WRITE_CHUNK_SIZE
+            );
+        }
+    }
+
+    #[test]
+    fn storage_write_final_ack_timeout_is_error_after_chunks() {
+        let (transport, writes) = RecordingTransport::timeout(TransportKind::Ble);
+        let mut client = FlipperClient::new(Box::new(transport));
+        let data = vec![0x42; 1024];
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_for_callback = Arc::clone(&progress);
+
+        let err = storage_write(
+            &mut client,
+            "/ext/apps/ACAB/app.fap",
+            &data,
+            |sent, total| progress_for_callback.lock().unwrap().push((sent, total)),
+            || false,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, FlipperError::Io(ref io) if io.kind() == io::ErrorKind::TimedOut));
+
+        let written = writes.lock().unwrap().clone();
+        let frames = decode_written_messages(&written);
+        assert_eq!(frames.len(), 2); // BLE uses 512-byte storage chunks.
+        assert_eq!(progress.lock().unwrap().last(), Some(&(1024, 1024)));
+    }
+
+    #[test]
+    fn storage_write_ignores_foreign_response_before_matching_ack() {
+        let responses = vec![
+            RecordingTransport::ok_response(99),
+            RecordingTransport::ok_response(1),
+        ];
+        let (transport, writes) = RecordingTransport::with_responses(TransportKind::Ble, responses);
+        let mut client = FlipperClient::new(Box::new(transport));
+        let data = vec![0x42; 512];
+
+        storage_write(
+            &mut client,
+            "/ext/apps/ACAB/app.fap",
+            &data,
+            |_, _| {},
+            || false,
+        )
+        .unwrap();
+
+        let written = writes.lock().unwrap().clone();
+        let frames = decode_written_messages(&written);
+        assert_eq!(frames.len(), 1);
+    }
 }

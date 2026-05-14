@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-11
+
 ### Added
 - App-icon chooser in Settings → Appearance: pick between the default orange and a dark variant. Live runtime swap of Tauri window icons (Windows taskbar / Linux title bar) and the macOS Dock via `NSApplication.setApplicationIconImage_`. The chosen variant is also written to the running `.app` bundle as a Finder custom icon (`NSWorkspace.setIcon:forFile:`), so the Dock launcher and Finder show it from launch and after quit — no orange-then-dark flash on macOS. The saved variant is re-applied on every launch, so the bundle icon recovers automatically after app updates that reset bundle metadata.
 - Forward-proof app-icon variant registry on the Rust side (`app_icon.rs`) so adding new icon variants in the future is one entry plus a PNG.
@@ -216,7 +218,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Basic file browser and device info.
 - Initial Tauri v2 scaffolding.
 
-[Unreleased]: https://github.com/fuckmaz/FlipperUI/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/fuckmaz/FlipperUI/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/fuckmaz/FlipperUI/releases/tag/v0.4.0
 [0.3.5]: https://github.com/fuckmaz/FlipperUI/releases/tag/v0.3.5
 [0.3.4]: https://github.com/fuckmaz/FlipperUI/commit/93b85cc
 [0.3.3]: https://github.com/fuckmaz/FlipperUI/commit/fc62325
