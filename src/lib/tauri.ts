@@ -409,6 +409,39 @@ export const badusbScan = async (
 export const badusbCancelScan = (): Promise<void> =>
   invoke<void>("badusb_cancel_scan");
 
+// ── Library prewalk ─────────────────────────────────────────────────────
+
+export type PrewalkLibrary = "subghz" | "infrared" | "nfc" | "rfid" | "badusb";
+
+export interface PrewalkLargestFile {
+  name: string;
+  size: number;
+}
+
+export interface PrewalkDirStat {
+  path: string;
+  entry_count: number;
+  largest_file: PrewalkLargestFile | null;
+}
+
+/**
+ * Walk the given library roots and return directories that cross the
+ * pre-scan thresholds (≥254 direct entries, or contain a >1 MiB file).
+ * Emits `library-prewalk-progress` events while walking.
+ */
+export const libraryPrewalk = async (
+  library: PrewalkLibrary,
+  roots: string[],
+  excludedDirs: string[],
+): Promise<PrewalkDirStat[]> => {
+  await awaitCliCleanup();
+  return invoke<PrewalkDirStat[]>("library_prewalk", {
+    library,
+    roots,
+    excluded_dirs: excludedDirs,
+  });
+};
+
 /** parse only BadUSB / BadKB `.txt` paths */
 export const badusbParsePaths = async (paths: string[]): Promise<BadUsbEntry[]> => {
   await awaitCliCleanup();

@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { Tv, AlertTriangle } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { infraredCancelScan, infraredScan } from "../../lib/tauri";
-import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { useLibraryPreScan } from "../../hooks/useLibraryPreScan";
 import { loadInfraredCache, saveInfraredCache } from "../../lib/infraredCache";
 import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
@@ -27,6 +28,7 @@ export function InfraredLibrary() {
   const [query, setQuery] = useState("");
   const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+  const { checkBeforeScan, modal: preScanModal } = useLibraryPreScan("infrared");
 
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.infrared.excludedDirs));
@@ -80,7 +82,15 @@ export function InfraredLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
-      const list = await infraredScan(IR_ROOT, excludedDirs, entries);
+      const effective = await checkBeforeScan(
+        [IR_ROOT],
+        excludedDirs,
+        async (next) => {
+          await updateSettings({ infrared: { excludedDirs: next } });
+        },
+      );
+      if (effective === null) return;
+      const list = await infraredScan(IR_ROOT, effective, entries);
       setEntries(list);
       if (deviceUid) {
         await saveInfraredCache(deviceUid, list).catch(() => {});
@@ -169,6 +179,8 @@ export function InfraredLibrary() {
       ) : (
         <LibraryTable entries={filtered} />
       )}
+
+      {preScanModal}
     </div>
   );
 }

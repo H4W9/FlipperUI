@@ -449,6 +449,7 @@ pub fn run() {
             commands::badusb::badusb_scan,
             commands::badusb::badusb_cancel_scan,
             commands::badusb::badusb_parse_paths,
+            commands::library_prewalk::library_prewalk,
             commands::apps::apps_scan,
             commands::apps::apps_cancel_scan,
             commands::apps::apps_parse_paths,

@@ -4,7 +4,8 @@ import { AlertTriangle } from "lucide-react";
 import rfidIconSvg from "../../assets/icons/125.svg";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { rfidCancelScan, rfidParsePaths, rfidScan } from "../../lib/tauri";
-import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { useLibraryPreScan } from "../../hooks/useLibraryPreScan";
 import { loadRfidCache, saveRfidCache } from "../../lib/rfidCache";
 import { notify } from "../../lib/notify";
 import { useLibraryDrop } from "../../hooks/useLibraryDrop";
@@ -30,6 +31,7 @@ export function RfidLibrary() {
   const [query, setQuery] = useState("");
   const [keyTypeFilter, setKeyTypeFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+  const { checkBeforeScan, modal: preScanModal } = useLibraryPreScan("rfid");
 
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.rfid.excludedDirs));
@@ -82,7 +84,15 @@ export function RfidLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
-      const list = await rfidScan(RFID_ROOT, excludedDirs, entries);
+      const effective = await checkBeforeScan(
+        [RFID_ROOT],
+        excludedDirs,
+        async (next) => {
+          await updateSettings({ rfid: { excludedDirs: next } });
+        },
+      );
+      if (effective === null) return;
+      const list = await rfidScan(RFID_ROOT, effective, entries);
       setEntries(list);
       if (deviceUid) {
         await saveRfidCache(deviceUid, list).catch(() => {});
@@ -107,6 +117,7 @@ export function RfidLibrary() {
     entries,
     setEntries,
     deviceUid,
+    checkBeforeScan,
   ]);
 
   const cancelScan = async () => {
@@ -211,6 +222,8 @@ export function RfidLibrary() {
         visible={isDragOver}
         label={`Drop .rfid files to upload to ${RFID_ROOT}`}
       />
+
+      {preScanModal}
     </div>
   );
 }

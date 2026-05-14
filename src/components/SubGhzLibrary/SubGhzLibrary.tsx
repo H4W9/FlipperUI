@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { RadioTower, AlertTriangle } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { subghzCancelScan, subghzScan } from "../../lib/tauri";
-import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { useLibraryPreScan } from "../../hooks/useLibraryPreScan";
 import { notify } from "../../lib/notify";
 import {
   loadSubghzCache,
@@ -34,6 +35,7 @@ export function SubGhzLibrary() {
   const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
   const [starredOnly, setStarredOnly] = useState(false);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+  const { checkBeforeScan, modal: preScanModal } = useLibraryPreScan("subghz");
 
   const toggleFavorite = (path: string) => {
     const next = favorites.includes(path)
@@ -100,9 +102,17 @@ export function SubGhzLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
+      const effective = await checkBeforeScan(
+        [SUBGHZ_ROOT],
+        excludedDirs,
+        async (next) => {
+          await updateSettings({ subghz: { excludedDirs: next } });
+        },
+      );
+      if (effective === null) return; // user closed the prescan modal
       // Feed the current in-memory list (which was hydrated from disk) as
       // the cache hint — Rust skips reading any file whose mtime matches.
-      const list = await subghzScan(SUBGHZ_ROOT, excludedDirs, entries);
+      const list = await subghzScan(SUBGHZ_ROOT, effective, entries);
       setEntries(list);
       if (deviceUid) {
         await saveSubghzCache(deviceUid, list).catch(() => {});
@@ -191,6 +201,8 @@ export function SubGhzLibrary() {
           onToggleFavorite={toggleFavorite}
         />
       )}
+
+      {preScanModal}
     </div>
   );
 }

@@ -8,6 +8,7 @@ pub mod device;
 pub mod diag;
 pub mod gui;
 pub mod infrared;
+pub mod library_prewalk;
 pub mod library_scan;
 pub mod nfc;
 pub mod path;

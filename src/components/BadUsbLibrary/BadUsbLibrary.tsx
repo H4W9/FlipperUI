@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { AlertTriangle, Usb } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { badusbCancelScan, badusbScan } from "../../lib/tauri";
-import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { useLibraryPreScan } from "../../hooks/useLibraryPreScan";
 import { loadBadUsbCache, saveBadUsbCache } from "../../lib/badusbCache";
 import { notify } from "../../lib/notify";
 import { LibraryToolbar } from "./LibraryToolbar";
@@ -33,6 +34,7 @@ export function BadUsbLibrary() {
   const [kindFilter, setKindFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
   const [previewEntry, setPreviewEntry] = useState<BadUsbEntry | null>(null);
+  const { checkBeforeScan, modal: preScanModal } = useLibraryPreScan("badusb");
 
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.badusb.excludedDirs));
@@ -84,7 +86,15 @@ export function BadUsbLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
-      const list = await badusbScan(USB_ROOT, KB_ROOT, excludedDirs, entries);
+      const effective = await checkBeforeScan(
+        [USB_ROOT, KB_ROOT],
+        excludedDirs,
+        async (next) => {
+          await updateSettings({ badusb: { excludedDirs: next } });
+        },
+      );
+      if (effective === null) return;
+      const list = await badusbScan(USB_ROOT, KB_ROOT, effective, entries);
       setEntries(list);
       if (deviceUid) {
         await saveBadUsbCache(deviceUid, list).catch(() => {});
@@ -188,6 +198,8 @@ export function BadUsbLibrary() {
           />
         </Suspense>
       )}
+
+      {preScanModal}
     </div>
   );
 }

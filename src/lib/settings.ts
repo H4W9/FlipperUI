@@ -98,6 +98,13 @@ export interface AppSettings {
       delete: boolean;
     };
   };
+  libraries: {
+    /** When true, run a pre-scan walk before Sub-GHz / Infrared / NFC / RFID /
+     * BadUSB scans and prompt the user about directories with ≥254 entries or
+     * containing files larger than 1 MiB. Checked rows are added to that
+     * library's persistent `excludedDirs`. Apps is not affected. */
+    preScanReview: boolean;
+  };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -122,6 +129,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   fileBrowser: {
     inlineActions: { rename: true, download: true, delete: true },
+  },
+  libraries: {
+    preScanReview: true,
   },
 };
 
@@ -177,6 +187,9 @@ export type SettingsPatch = {
       download?: boolean;
       delete?: boolean;
     };
+  };
+  libraries?: {
+    preScanReview?: boolean;
   };
 };
 
@@ -290,6 +303,10 @@ async function updateSettingsNow(patch: SettingsPatch): Promise<AppSettings> {
           current.fileBrowser.inlineActions.delete,
       },
     },
+    libraries: {
+      preScanReview:
+        patch.libraries?.preScanReview ?? current.libraries.preScanReview,
+    },
   };
   await store.set(STORE_KEY, next);
   cached = next;
@@ -388,6 +405,11 @@ function mergeWithDefaults(raw: Partial<AppSettings>): AppSettings {
           raw.fileBrowser?.inlineActions?.delete ??
           DEFAULT_SETTINGS.fileBrowser.inlineActions.delete,
       },
+    },
+    libraries: {
+      preScanReview:
+        raw.libraries?.preScanReview ??
+        DEFAULT_SETTINGS.libraries.preScanReview,
     },
   };
 }

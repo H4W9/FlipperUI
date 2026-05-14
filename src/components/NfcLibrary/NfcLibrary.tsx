@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { AlertTriangle, Nfc } from "lucide-react";
 import { useFlipperStore } from "../../store/useFlipperStore";
 import { nfcCancelScan, nfcParsePaths, nfcScan } from "../../lib/tauri";
-import { loadSettings, subscribeSettings } from "../../lib/settings";
+import { loadSettings, subscribeSettings, updateSettings } from "../../lib/settings";
+import { useLibraryPreScan } from "../../hooks/useLibraryPreScan";
 import { loadNfcCache, saveNfcCache } from "../../lib/nfcCache";
 import { notify } from "../../lib/notify";
 import { useLibraryDrop } from "../../hooks/useLibraryDrop";
@@ -29,6 +30,7 @@ export function NfcLibrary() {
   const [query, setQuery] = useState("");
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<string | null>(null);
   const [cacheScannedAt, setCacheScannedAt] = useState<number | null>(null);
+  const { checkBeforeScan, modal: preScanModal } = useLibraryPreScan("nfc");
 
   useEffect(() => {
     loadSettings().then((s) => setExcludedDirs(s.nfc.excludedDirs));
@@ -86,7 +88,15 @@ export function NfcLibrary() {
     setScanning(true);
     setProgress({ scanned: 0, total: 0, current_path: "" });
     try {
-      const list = await nfcScan(NFC_ROOT, excludedDirs, entries);
+      const effective = await checkBeforeScan(
+        [NFC_ROOT],
+        excludedDirs,
+        async (next) => {
+          await updateSettings({ nfc: { excludedDirs: next } });
+        },
+      );
+      if (effective === null) return; // user closed the prescan modal
+      const list = await nfcScan(NFC_ROOT, effective, entries);
       setEntries(list);
       if (deviceUid) {
         await saveNfcCache(deviceUid, list).catch(() => {});
@@ -111,6 +121,7 @@ export function NfcLibrary() {
     entries,
     setEntries,
     deviceUid,
+    checkBeforeScan,
   ]);
 
   const cancelScan = async () => {
@@ -226,6 +237,8 @@ export function NfcLibrary() {
         visible={isDragOver}
         label={`Drop .nfc files to upload to ${NFC_ROOT}`}
       />
+
+      {preScanModal}
     </div>
   );
 }

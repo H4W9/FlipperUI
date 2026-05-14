@@ -104,6 +104,11 @@ export function SettingsPane() {
     setSettings(next);
   };
 
+  const onPreScanReviewChange = async (preScanReview: boolean) => {
+    const next = await updateSettings({ libraries: { preScanReview } });
+    setSettings(next);
+  };
+
   const onDisconnectNotifChange = async (deviceDisconnected: boolean) => {
     const next = await updateSettings({
       notifications: { deviceDisconnected },
@@ -429,6 +434,17 @@ export function SettingsPane() {
         </Section>
 
         <Section icon={<Filter size={13} />} title="Library Exclusions">
+          <Row
+            label="Pre-scan review"
+            hint="Before each library scan, surface directories with 254+ entries or files larger than 1 MiB so you can exclude them. Excluded folders are saved here. Doesn't apply to the Apps library."
+          >
+            <Toggle
+              checked={settings?.libraries.preScanReview ?? true}
+              disabled={!settings}
+              onChange={onPreScanReviewChange}
+              ariaLabel="Pre-scan review of heavy directories"
+            />
+          </Row>
           <LibraryExclusionsEditor
             settings={settings}
             disabled={!settings}
