@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bluetooth, Signal, RefreshCw } from "lucide-react";
+import { Bluetooth, RefreshCw } from "lucide-react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   startBleScan,
@@ -16,13 +16,61 @@ interface BleDialogProps {
   onClose: () => void;
 }
 
-function rssiBars(rssi: number | null): string {
-  if (rssi == null) return "—";
-  if (rssi >= -55) return "●●●●";
-  if (rssi >= -65) return "●●●○";
-  if (rssi >= -75) return "●●○○";
-  if (rssi >= -85) return "●○○○";
-  return "○○○○";
+/** Map RSSI (in dBm) to a fill count out of 4. Anything ≥ -55 dBm is
+ * effectively "right next to the antenna"; below -90 dBm is unusable. */
+function rssiToBars(rssi: number | null): 0 | 1 | 2 | 3 | 4 {
+  if (rssi == null) return 0;
+  if (rssi >= -55) return 4;
+  if (rssi >= -65) return 3;
+  if (rssi >= -75) return 2;
+  if (rssi >= -85) return 1;
+  return 0;
+}
+
+/** Tier-coloured WiFi-style vertical bars (4 ascending heights). Unfilled
+ * bars stay dim so the indicator reads even at zero signal. When RSSI is
+ * unknown, every bar is dim and no colour is applied. */
+function SignalBars({ rssi }: { rssi: number | null }) {
+  const filled = rssiToBars(rssi);
+  const tone =
+    rssi == null
+      ? "var(--color-dim)"
+      : filled >= 4
+        ? "var(--color-success)"
+        : filled >= 3
+          ? "var(--color-accent)"
+          : filled >= 2
+            ? "var(--color-warning)"
+            : "var(--color-danger)";
+
+  // Bar geometry: 4 bars, each 3px wide, 1px gap, heights 4/7/10/13, baseline 14.
+  const bars = [
+    { x: 0, h: 4 },
+    { x: 4, h: 7 },
+    { x: 8, h: 10 },
+    { x: 12, h: 13 },
+  ];
+  return (
+    <svg
+      width={15}
+      height={14}
+      viewBox="0 0 15 14"
+      aria-hidden
+      className="shrink-0"
+    >
+      {bars.map((b, i) => (
+        <rect
+          key={i}
+          x={b.x}
+          y={14 - b.h}
+          width={3}
+          height={b.h}
+          rx={0.5}
+          fill={i < filled ? tone : "var(--color-elevated)"}
+        />
+      ))}
+    </svg>
+  );
 }
 
 function sortDevices(list: BleDevice[]): BleDevice[] {
@@ -236,15 +284,17 @@ export function BleDialog({ onClose }: BleDialogProps) {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-primary truncate">{d.name}</div>
                   <div className="text-[11px] text-muted truncate">
-                    {d.paired ? "paired" : "not paired"} · {d.id}
+                    {d.paired ? "paired" : "not paired"}
                   </div>
                 </div>
                 <span
-                  className="flex items-center gap-1 text-xs text-secondary tabular-nums"
+                  className="flex items-center gap-1.5 tabular-nums"
                   title={d.rssi != null ? `RSSI ${d.rssi} dBm` : "no RSSI"}
                 >
-                  <Signal size={12} />
-                  {rssiBars(d.rssi)}
+                  <SignalBars rssi={d.rssi} />
+                  <span className="text-[10px] text-muted">
+                    {d.rssi != null ? `${d.rssi} dBm` : "—"}
+                  </span>
                 </span>
                 {busy && <Spinner size={13} />}
               </button>
