@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- Splash window cleaned up: removed the "Starting up…" status line so only the spinner and the FlipperUI wordmark remain, centered in the splash modal.
+
 ### Fixed
 - BLE File Explorer uploads now use reliable acknowledged writes, smaller BLE storage chunks, byte-based progress, matching ACK handling, and clean reconnect recovery instead of timing out after the file data is queued.
 
