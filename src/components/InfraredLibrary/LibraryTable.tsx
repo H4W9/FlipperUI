@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import {
@@ -16,6 +16,7 @@ import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { formatMtime } from "../../lib/format";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveInfraredCache } from "../../lib/infraredCache";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { IrEntry } from "../../types/infrared";
 
 const ROW_HEIGHT = 46;
@@ -31,6 +32,9 @@ interface Props {
 export function LibraryTable({ entries }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [contextMenu, setContextMenu] = useState<
+    { x: number; y: number; items: MenuItem[] } | null
+  >(null);
 
   const sorted = useMemo(
     () => sortEntries(entries, sortKey, sortDir),
@@ -44,6 +48,11 @@ export function LibraryTable({ entries }: Props) {
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
 
   const onHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -90,12 +99,15 @@ export function LibraryTable({ entries }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={entries} />
+                <Row entry={entry} allEntries={entries} onContextMenu={openMenu} />
               </div>
             );
           })}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }
@@ -153,7 +165,15 @@ function HeaderCell({
   );
 }
 
-function Row({ entry, allEntries }: { entry: IrEntry; allEntries: IrEntry[] }) {
+function Row({
+  entry,
+  allEntries,
+  onContextMenu,
+}: {
+  entry: IrEntry;
+  allEntries: IrEntry[];
+  onContextMenu: (e: React.MouseEvent, items: MenuItem[]) => void;
+}) {
   const setError = useFlipperStore((s) => s.setIrError);
   const setEntries = useFlipperStore((s) => s.setIrEntries);
   const deviceUid = useFlipperStore((s) => s.deviceInfo?.hardware_uid ?? null);
@@ -258,11 +278,27 @@ function Row({ entry, allEntries }: { entry: IrEntry; allEntries: IrEntry[] }) {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (renaming) return;
+    onContextMenu(e, [
+      { label: "Rename", icon: <Pencil size={12} />, onClick: startRename },
+      { label: "Duplicate", icon: <Copy size={12} />, onClick: onDuplicate },
+      { type: "separator" },
+      {
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: onDelete,
+        danger: true,
+      },
+    ]);
+  };
+
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
       draggable={!renaming}
       onDragStart={handleDragStart}
+      onContextMenu={handleContextMenu}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
@@ -25,6 +25,7 @@ import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { formatSize, formatMtime } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { RfidEntry } from "../../types/rfid";
 
 const ROW_HEIGHT = 46;
@@ -40,6 +41,9 @@ interface Props {
 export function LibraryTable({ entries }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [contextMenu, setContextMenu] = useState<
+    { x: number; y: number; items: MenuItem[] } | null
+  >(null);
 
   const sorted = useMemo(
     () => sortEntries(entries, sortKey, sortDir),
@@ -53,6 +57,11 @@ export function LibraryTable({ entries }: Props) {
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
 
   const onHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -99,12 +108,15 @@ export function LibraryTable({ entries }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={entries} />
+                <Row entry={entry} allEntries={entries} onContextMenu={openMenu} />
               </div>
             );
           })}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }
@@ -163,7 +175,15 @@ function HeaderCell({
   );
 }
 
-function Row({ entry, allEntries }: { entry: RfidEntry; allEntries: RfidEntry[] }) {
+function Row({
+  entry,
+  allEntries,
+  onContextMenu,
+}: {
+  entry: RfidEntry;
+  allEntries: RfidEntry[];
+  onContextMenu: (e: React.MouseEvent, items: MenuItem[]) => void;
+}) {
   const setError = useFlipperStore((s) => s.setRfidError);
   const setEntries = useFlipperStore((s) => s.setRfidEntries);
   const deviceUid = useFlipperStore((s) => s.deviceInfo?.hardware_uid ?? null);
@@ -284,11 +304,28 @@ function Row({ entry, allEntries }: { entry: RfidEntry; allEntries: RfidEntry[] 
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (renaming) return;
+    onContextMenu(e, [
+      { label: "Download", icon: <Download size={12} />, onClick: onDownload },
+      { label: "Rename", icon: <Pencil size={12} />, onClick: startRename },
+      { label: "Duplicate", icon: <Copy size={12} />, onClick: onDuplicate },
+      { type: "separator" },
+      {
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: onDelete,
+        danger: true,
+      },
+    ]);
+  };
+
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
       draggable={!renaming}
       onDragStart={handleDragStart}
+      onContextMenu={handleContextMenu}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

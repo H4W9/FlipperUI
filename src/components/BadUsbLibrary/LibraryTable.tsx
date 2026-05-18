@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
@@ -25,6 +25,7 @@ import { useExportDrag } from "../../hooks/useExportDrag";
 import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { formatSize, formatMtime } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { BadUsbEntry } from "../../types/badusb";
 
 const ROW_HEIGHT = 46;
@@ -41,6 +42,9 @@ interface Props {
 export function LibraryTable({ entries, allEntries, onPreview }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [contextMenu, setContextMenu] = useState<
+    { x: number; y: number; items: MenuItem[] } | null
+  >(null);
 
   const sorted = useMemo(
     () => sortEntries(entries, sortKey, sortDir),
@@ -54,6 +58,11 @@ export function LibraryTable({ entries, allEntries, onPreview }: Props) {
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
 
   const onHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -96,12 +105,20 @@ export function LibraryTable({ entries, allEntries, onPreview }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={allEntries} onPreview={onPreview} />
+                <Row
+                  entry={entry}
+                  allEntries={allEntries}
+                  onPreview={onPreview}
+                  onContextMenu={openMenu}
+                />
               </div>
             );
           })}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }
@@ -164,10 +181,12 @@ function Row({
   entry,
   allEntries,
   onPreview,
+  onContextMenu,
 }: {
   entry: BadUsbEntry;
   allEntries: BadUsbEntry[];
   onPreview: (entry: BadUsbEntry) => void;
+  onContextMenu: (e: React.MouseEvent, items: MenuItem[]) => void;
 }) {
   const setError = useFlipperStore((s) => s.setBadUsbError);
   const setEntries = useFlipperStore((s) => s.setBadUsbEntries);
@@ -288,6 +307,23 @@ function Row({
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (renaming) return;
+    onContextMenu(e, [
+      { label: "Edit", icon: <FilePenLine size={12} />, onClick: () => onPreview(entry) },
+      { label: "Download", icon: <Download size={12} />, onClick: onDownload },
+      { label: "Rename", icon: <Pencil size={12} />, onClick: startRename },
+      { label: "Duplicate", icon: <Copy size={12} />, onClick: onDuplicate },
+      { type: "separator" },
+      {
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: onDelete,
+        danger: true,
+      },
+    ]);
+  };
+
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors cursor-pointer`}
@@ -296,6 +332,7 @@ function Row({
       onDoubleClick={() => {
         if (!renaming && busy === null) onPreview(entry);
       }}
+      onContextMenu={handleContextMenu}
       title="Double-click to edit"
     >
       <div className="flex flex-col min-w-0">

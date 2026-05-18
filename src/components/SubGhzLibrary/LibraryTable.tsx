@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import {
@@ -20,6 +20,7 @@ import { relativeDir, parentDir, nextDuplicateName } from "../../lib/path";
 import { formatMtime } from "../../lib/format";
 import { storageRead, storageRename, storageWrite, storageDelete } from "../../lib/tauri";
 import { saveSubghzCache } from "../../lib/subghzCache";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { SubGhzEntry } from "../../types/subghz";
 
 const ROW_HEIGHT = 46;
@@ -37,6 +38,9 @@ interface Props {
 export function LibraryTable({ entries, favorites, onToggleFavorite }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [contextMenu, setContextMenu] = useState<
+    { x: number; y: number; items: MenuItem[] } | null
+  >(null);
 
   const sorted = useMemo(
     () => sortEntries(entries, sortKey, sortDir),
@@ -50,6 +54,11 @@ export function LibraryTable({ entries, favorites, onToggleFavorite }: Props) {
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
 
   const onHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -101,12 +110,16 @@ export function LibraryTable({ entries, favorites, onToggleFavorite }: Props) {
                   allEntries={entries}
                   starred={favorites.has(entry.path)}
                   onToggleFavorite={onToggleFavorite}
+                  onContextMenu={openMenu}
                 />
               </div>
             );
           })}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }
@@ -171,11 +184,13 @@ function Row({
   allEntries,
   starred,
   onToggleFavorite,
+  onContextMenu,
 }: {
   entry: SubGhzEntry;
   allEntries: SubGhzEntry[];
   starred: boolean;
   onToggleFavorite: (path: string) => void;
+  onContextMenu: (e: React.MouseEvent, items: MenuItem[]) => void;
 }) {
   const setError = useFlipperStore((s) => s.setSubghzError);
   const setEntries = useFlipperStore((s) => s.setSubghzEntries);
@@ -290,11 +305,42 @@ function Row({
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (renaming) return;
+    const items: MenuItem[] = [
+      {
+        label: starred ? "Unstar" : "Star",
+        icon: <Star size={12} className={starred ? "fill-accent text-accent" : ""} />,
+        onClick: () => onToggleFavorite(entry.path),
+      },
+    ];
+    if (entry.coordinates) {
+      items.push({
+        label: "Open in Maps",
+        icon: <MapPin size={12} />,
+        onClick: onMaps,
+      });
+    }
+    items.push(
+      { label: "Rename", icon: <Pencil size={12} />, onClick: startRename },
+      { label: "Duplicate", icon: <Copy size={12} />, onClick: onDuplicate },
+      { type: "separator" },
+      {
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: onDelete,
+        danger: true,
+      },
+    );
+    onContextMenu(e, items);
+  };
+
   return (
     <div
       className={`group grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
       draggable={!renaming}
       onDragStart={handleDragStart}
+      onContextMenu={handleContextMenu}
     >
       <div className="flex flex-col min-w-0">
         {renaming ? (

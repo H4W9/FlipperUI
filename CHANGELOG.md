@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Right-click context menus on every library view (Sub-GHz, Infrared, NFC, RFID, BadUSB, Apps). Items are tailored per library: SubGhz gets Star/Unstar + Open in Maps (when GPS coords exist) + Rename + Duplicate + Delete; NFC/RFID get Download + Rename + Duplicate + Delete; BadUSB gets Edit + Download + Rename + Duplicate + Delete; Apps gets Launch + Download + Rename + Delete; Infrared gets Rename + Duplicate + Delete. Inline hover-action buttons still work on every row. New shared `ui/ContextMenu.tsx` component; FileBrowser was refactored onto it too so all popups in the app share one implementation.
 - Pre-scan heavy-directory review for Sub-GHz / Infrared / NFC / RFID / BadUSB scans. Before each scan the app walks the library roots and lists every directory with 254+ direct entries or files larger than 1 MiB; the user picks which dirs to exclude with checkboxes, and the chosen paths are appended to that library's persistent exclusion list before the real scan starts. New shared Rust prewalk module + `library_prewalk` Tauri command emitting `library-prewalk-progress` events.
 - Settings → Library Exclusions → "Pre-scan review" toggle (on by default) to enable/disable the pre-scan review modal across all five libraries. The Apps library is not affected.
 

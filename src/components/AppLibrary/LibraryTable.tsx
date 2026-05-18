@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { confirm, save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
@@ -25,6 +25,7 @@ import { relativeDir, parentDir } from "../../lib/path";
 import { formatMtime } from "../../lib/format";
 import { base64ToUint8Array } from "../../lib/encoding";
 import { FapIcon } from "./FapIcon";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { AppEntry } from "../../types/apps";
 
 const ROW_HEIGHT = 46;
@@ -40,6 +41,9 @@ interface Props {
 export function LibraryTable({ entries, allEntries }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [contextMenu, setContextMenu] = useState<
+    { x: number; y: number; items: MenuItem[] } | null
+  >(null);
 
   const sorted = useMemo(
     () => sortEntries(entries, sortKey, sortDir),
@@ -53,6 +57,11 @@ export function LibraryTable({ entries, allEntries }: Props) {
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const openMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
 
   const onHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -99,12 +108,15 @@ export function LibraryTable({ entries, allEntries }: Props) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
-                <Row entry={entry} allEntries={allEntries} />
+                <Row entry={entry} allEntries={allEntries} onContextMenu={openMenu} />
               </div>
             );
           })}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }
@@ -193,9 +205,11 @@ function HeaderCell({
 function Row({
   entry,
   allEntries,
+  onContextMenu,
 }: {
   entry: AppEntry;
   allEntries: AppEntry[];
+  onContextMenu: (e: React.MouseEvent, items: MenuItem[]) => void;
 }) {
   const setError = useFlipperStore((s) => s.setAppsError);
   const setEntries = useFlipperStore((s) => s.setAppEntries);
@@ -321,11 +335,32 @@ function Row({
 
   const rowDisabled = busy !== null || renaming;
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (renaming) return;
+    onContextMenu(e, [
+      {
+        label: launching ? "Launching…" : "Launch",
+        icon: <Play size={12} />,
+        onClick: onLaunch,
+      },
+      { label: "Download", icon: <Download size={12} />, onClick: onDownload },
+      { label: "Rename", icon: <Pencil size={12} />, onClick: startRename },
+      { type: "separator" },
+      {
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: onDelete,
+        danger: true,
+      },
+    ]);
+  };
+
   return (
     <div
       className={`grid ${GRID_COLS} gap-2 px-3 h-full items-center text-xs border-b border-border-subtle/50 hover:bg-surface/40 transition-colors`}
       draggable={!renaming}
       onDragStart={handleDragStart}
+      onContextMenu={handleContextMenu}
     >
       <FapIcon bytes={icon?.icon} size={20} />
       <div className="flex flex-col min-w-0">

@@ -25,6 +25,7 @@ import { storageTarExtract, storageTimestamp } from "../../lib/tauri";
 import { loadSettings, subscribeSettings } from "../../lib/settings";
 import { joinPath } from "../../lib/encoding";
 import { Spinner } from "../ui/Spinner";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import type { FileEntry } from "../../types/flipper";
 
 const ROW_HEIGHT = 32; // px — fixed height for virtual scrolling
@@ -63,121 +64,6 @@ function sortEntries(entries: FileEntry[], key: SortKey, dir: SortDir): FileEntr
     return dir === "asc" ? cmp : -cmp;
   });
   return sorted;
-}
-
-// ── Context menu ─────────────────────────────────────────────────────────────
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  entry: FileEntry;
-}
-
-interface ContextMenuProps extends ContextMenuState {
-  onRename: () => void;
-  onDownload: () => void;
-  onDelete: () => void;
-  onExtractTar: () => void;
-  onClose: () => void;
-}
-
-function ContextMenu({
-  x,
-  y,
-  entry,
-  onRename,
-  onDownload,
-  onDelete,
-  onExtractTar,
-  onClose,
-}: ContextMenuProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isDir = entry.file_type === 1;
-  const isTar = !isDir && isTarFile(entry.name);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    document.addEventListener("keydown", keyHandler);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-      document.removeEventListener("keydown", keyHandler);
-    };
-  }, [onClose]);
-
-  const style: React.CSSProperties = { position: "fixed", zIndex: 50 };
-  const winW = window.innerWidth;
-  const winH = window.innerHeight;
-  const menuW = 160;
-  const menuH = 130;
-  style.left = x + menuW > winW ? winW - menuW - 4 : x;
-  style.top = y + menuH > winH ? winH - menuH - 4 : y;
-
-  const item =
-    "flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-elevated cursor-pointer rounded transition-colors";
-
-  return (
-    <div
-      ref={ref}
-      role="menu"
-      aria-label="File actions"
-      style={style}
-      className="w-40 bg-surface border border-elevated rounded shadow-xl py-1 text-primary"
-    >
-      <div
-        role="menuitem"
-        className={item}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onRename();
-          onClose();
-        }}
-      >
-        <Pencil size={12} className="text-secondary" /> Rename
-      </div>
-      <div
-        role="menuitem"
-        className={item}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onDownload();
-          onClose();
-        }}
-      >
-        <Download size={12} className="text-secondary" /> Download
-      </div>
-      {isTar && (
-        <div
-          role="menuitem"
-          className={item}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onExtractTar();
-            onClose();
-          }}
-        >
-          <Archive size={12} className="text-secondary" /> Extract here
-        </div>
-      )}
-      <div className="my-1 border-t border-elevated" role="separator" />
-      <div
-        role="menuitem"
-        className={`${item} text-danger hover:text-danger/80 hover:bg-danger/10`}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onDelete();
-          onClose();
-        }}
-      >
-        <Trash2 size={12} /> Delete
-      </div>
-    </div>
-  );
 }
 
 // ── File row ─────────────────────────────────────────────────────────────────
@@ -434,7 +320,7 @@ export function FileList() {
   const { download, downloadFolder, remove, refresh } = useStorage();
 
   const [renamingName, setRenamingName] = useState("");
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -510,14 +396,6 @@ export function FileList() {
     [selectedNames, filteredSorted],
   );
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, entry: FileEntry) => {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, entry });
-    },
-    [],
-  );
-
   const handleExtractTar = useCallback(
     async (entry: FileEntry) => {
       const tarPath = joinPath(currentPath, entry.name);
@@ -529,6 +407,41 @@ export function FileList() {
       }
     },
     [currentPath, refresh, setError],
+  );
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, entry: FileEntry) => {
+      e.preventDefault();
+      const isDir = entry.file_type === 1;
+      const items: MenuItem[] = [
+        {
+          label: "Rename",
+          icon: <Pencil size={12} />,
+          onClick: () => setRenamingName(entry.name),
+        },
+        {
+          label: "Download",
+          icon: <Download size={12} />,
+          onClick: () => (isDir ? downloadFolder(entry.name) : download(entry.name)),
+        },
+      ];
+      if (!isDir && isTarFile(entry.name)) {
+        items.push({
+          label: "Extract here",
+          icon: <Archive size={12} />,
+          onClick: () => handleExtractTar(entry),
+        });
+      }
+      items.push({ type: "separator" });
+      items.push({
+        label: "Delete",
+        icon: <Trash2 size={12} />,
+        onClick: () => remove(entry.name, isDir),
+        danger: true,
+      });
+      setContextMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [download, downloadFolder, handleExtractTar, remove],
   );
 
   // Keyboard shortcuts — use refs so the listener is stable (registered once)
@@ -677,14 +590,6 @@ export function FileList() {
         <ContextMenu
           {...contextMenu}
           onClose={() => setContextMenu(null)}
-          onRename={() => setRenamingName(contextMenu.entry.name)}
-          onDownload={() =>
-            contextMenu.entry.file_type === 1
-              ? downloadFolder(contextMenu.entry.name)
-              : download(contextMenu.entry.name)
-          }
-          onDelete={() => remove(contextMenu.entry.name, contextMenu.entry.file_type === 1)}
-          onExtractTar={() => handleExtractTar(contextMenu.entry)}
         />
       )}
     </>
