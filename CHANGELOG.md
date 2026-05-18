@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - BLE File Explorer uploads now use reliable acknowledged writes, smaller BLE storage chunks, byte-based progress, matching ACK handling, and clean reconnect recovery instead of timing out after the file data is queued.
+- COM port dropdown items now render with a dark background on Linux/GTK (matched macOS); the native `<option>` elements were inheriting the OS default light background even though the `<select>` itself was themed dark.
 
 ## [0.4.0] — 2026-05-11
 
