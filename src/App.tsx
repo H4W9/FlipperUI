@@ -13,6 +13,7 @@ import { NfcLibrary } from "./components/NfcLibrary/NfcLibrary";
 import { RfidLibrary } from "./components/RfidLibrary/RfidLibrary";
 import { BadUsbLibrary } from "./components/BadUsbLibrary/BadUsbLibrary";
 import { AppLibrary } from "./components/AppLibrary/AppLibrary";
+import { GpioView } from "./components/Gpio/GpioView";
 import { DeviceInfoView } from "./components/DeviceInfo/DeviceInfoView";
 import { Dashboard } from "./components/Dashboard/Dashboard";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
@@ -263,6 +264,7 @@ function ActivePane({
   }
 
   if (activeView === "apps") return <AppLibrary />;
+  if (activeView === "gpio") return <GpioView />;
   if (activeView === "info") return <DeviceInfoView />;
   if (activeView === "cli") return <CliPanel />;
   if (activeView === "screen") return <ScreenViewer />;

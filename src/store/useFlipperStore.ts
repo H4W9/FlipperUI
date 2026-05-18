@@ -16,6 +16,7 @@ export type ActiveView =
   | "rfid"
   | "badusb"
   | "apps"
+  | "gpio"
   | "info"
   | "cli"
   | "screen"

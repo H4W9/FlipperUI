@@ -15,6 +15,7 @@ import rfidIconSvg from "../../assets/icons/125.svg?raw";
 import pluginsIconSvg from "../../assets/icons/plugins.svg?raw";
 import settingsIconSvg from "../../assets/icons/settings.svg?raw";
 import badusbIconSvg from "../../assets/icons/badusb.svg?raw";
+import gpioIconSvg from "../../assets/icons/gpio.svg?raw";
 //import archiveIconSvg from "../../assets/icons/archive.svg?raw";
 
 type RailIconProps = { size?: number; strokeWidth?: number };
@@ -49,6 +50,7 @@ const TOP_ITEMS: RailItem[] = [
   { view: "nfc", label: "NFC", Icon: flipperIcon(nfcIconSvg, "nfc"), requiresConnection: true, browsableOffline: "nfc" },
   { view: "rfid", label: "RFID", Icon: flipperIcon(rfidIconSvg, "rfid"), requiresConnection: true, browsableOffline: "rfid" },
   { view: "badusb", label: "BadUSB", Icon: flipperIcon(badusbIconSvg, "badusb"), requiresConnection: true, browsableOffline: "badusb" },
+  { view: "gpio", label: "GPIO", Icon: flipperIcon(gpioIconSvg, "gpio"), requiresConnection: true },
   { view: "screen", label: "Screen", Icon: Monitor, requiresConnection: true },
   { view: "cli", label: "Terminal", Icon: Terminal, requiresConnection: true, disabledOnBle: true },
   
